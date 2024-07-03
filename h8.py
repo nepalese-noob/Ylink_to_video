@@ -55,28 +55,9 @@ def clear_video_directory():
         except Exception as e:
             logging.error(f"Failed to delete {file_path}. Reason: {e}")
 
-# Function to synchronize time
-def synchronize_time():
+# Function to get time from websites
+def get_time_from_websites():
     try:
-        # Try to get time from the system
-        system_time = datetime.utcnow()
-        logging.info(f"System time: {system_time}")
-        return system_time
-    except Exception as e:
-        logging.error(f"Failed to get system time: {e}")
-
-    try:
-        # Try to get time from NTP servers
-        client = ntplib.NTPClient()
-        response = client.request('pool.ntp.org')
-        ntp_time = datetime.utcfromtimestamp(response.tx_time)
-        logging.info(f"NTP time: {ntp_time}")
-        return ntp_time
-    except Exception as e:
-        logging.error(f"Failed to get NTP time: {e}")
-
-    try:
-        # Try to get time from websites
         response = requests.get('http://worldtimeapi.org/api/timezone/Etc/UTC')
         website_time = datetime.fromisoformat(response.json()['datetime'])
         logging.info(f"Website time (worldtimeapi): {website_time}")
@@ -99,6 +80,46 @@ def synchronize_time():
         return website_time
     except Exception as e:
         logging.error(f"Failed to get time from timeapi.io: {e}")
+
+    return None
+
+# Function to get time from NTP servers
+def get_time_from_ntp():
+    try:
+        client = ntplib.NTPClient()
+        response = client.request('pool.ntp.org')
+        ntp_time = datetime.utcfromtimestamp(response.tx_time)
+        logging.info(f"NTP time: {ntp_time}")
+        return ntp_time
+    except Exception as e:
+        logging.error(f"Failed to get NTP time: {e}")
+
+    return None
+
+# Function to get time from the system
+def get_time_from_system():
+    try:
+        system_time = datetime.utcnow()
+        logging.info(f"System time: {system_time}")
+        return system_time
+    except Exception as e:
+        logging.error(f"Failed to get system time: {e}")
+
+    return None
+
+# Function to synchronize time
+def synchronize_time():
+    time = get_time_from_websites()
+    if time:
+        return time
+
+    time = get_time_from_ntp()
+    if time:
+        return time
+
+    time = get_time_from_system()
+    if time:
+        return time
 
     # If all methods fail, raise an exception
     raise Exception("Failed to synchronize time from all sources")
