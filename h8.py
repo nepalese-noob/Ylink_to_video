@@ -23,7 +23,7 @@ bot_token = os.environ["BOT_TOKEN"]
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
 # Define the directory where videos are saved
-VIDEO_DIR = "/sdcard/sentvideo_in_telegram/"
+VIDEO_DIR = "sent_video_in_telegram/"
 # Define YouTube URL pattern
 youtube_url_pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+'
 
