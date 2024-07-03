@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import yt_dlp
-from pyrogram import Client, filters, errors
+from pyrogram import Client, filters
 from threading import Thread
 from queue import Queue
 import time
@@ -59,8 +59,8 @@ def install_ffmpeg():
     except subprocess.CalledProcessError:
         logging.info("FFmpeg is not installed. Installing FFmpeg...")
         if sys.platform.startswith('linux'):
-            subprocess.run(["sudo", "apt-get", "update"], check=True)
-            subprocess.run(["sudo", "apt-get", "install", "-y", "ffmpeg"], check=True)
+            subprocess.run(["apt-get", "update"], check=True)
+            subprocess.run(["apt-get", "install", "-y", "ffmpeg"], check=True)
         elif sys.platform == "darwin":
             subprocess.run(["brew", "install", "ffmpeg"], check=True)
         elif sys.platform == "win32":
@@ -153,19 +153,8 @@ def handle_message(client, message):
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
-# Function to synchronize system time using systemd
-def synchronize_time():
-    try:
-        subprocess.run(["sudo", "timedatectl", "set-ntp", "true"], check=True)
-        logging.info("Time synchronized successfully.")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to synchronize time: {e}")
-
 # Start the Pyrogram client and the worker thread
 if __name__ == "__main__":
-    # Synchronize system time
-    synchronize_time()
-
     # Install FFmpeg if not already installed
     install_ffmpeg()
 
