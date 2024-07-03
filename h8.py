@@ -8,8 +8,6 @@ from queue import Queue
 import time
 import shutil
 from flask import Flask
-import ntplib
-from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -41,11 +39,6 @@ flask_app = Flask(__name__)
 @flask_app.route('/')
 def index():
     return "Telegram Bot is running!"
-
-def sync_system_time():
-    client = ntplib.NTPClient()
-    response = client.request('pool.ntp.org')
-    os.system(f'date {datetime.utcfromtimestamp(response.tx_time).strftime("%m%d%H%M%Y.%S")}')
 
 # Function to delete all files in the video directory
 def clear_video_directory():
@@ -146,9 +139,6 @@ def handle_message(client, message):
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
 if __name__ == "__main__":
-    # Sync system time
-    sync_system_time()
-
     # Start the worker thread
     worker_thread = Thread(target=process_youtube_links)
     worker_thread.start()
