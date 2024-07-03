@@ -23,7 +23,7 @@ bot_token = os.environ["BOT_TOKEN"]
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
 # Define the directory where videos are saved
-VIDEO_DIR = "./sentvideo_in_telegram/"
+VIDEO_DIR = "/sdcard/sentvideo_in_telegram/"
 # Define YouTube URL pattern
 youtube_url_pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+'
 
@@ -155,16 +155,19 @@ def sync_client_time(client):
                 logging.error("Max retry attempts reached for time sync.")
 
 if __name__ == "__main__":
-    # Synchronize client time before starting the bot
+    # Start Flask app in a separate thread
+    flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))))
+    flask_thread.start()
+
+    # Start the Pyrogram client
+    app.start()
+
+    # Synchronize client time after starting the client
     sync_client_time(app)
 
     # Start the worker thread
     worker_thread = Thread(target=process_youtube_links)
     worker_thread.start()
 
-    # Start Flask app in a separate thread
-    flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))))
-    flask_thread.start()
-
-    # Start the Pyrogram client
-    app.run()
+    # Keep the client running
+    app.idle()
