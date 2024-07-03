@@ -7,9 +7,8 @@ from threading import Thread
 from queue import Queue
 import time
 import shutil
-import subprocess
-import sys
-import ntplib  # Add ntplib for NTP time synchronization
+import ntplib
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,18 +17,14 @@ logging.basicConfig(level=logging.INFO)
 session_file_path = "my_bot.session"
 
 # Initialize the Pyrogram client
-api_id = os.getenv("API_ID")
-api_hash = os.getenv("API_HASH")
-bot_token = os.getenv("BOT_TOKEN")
+api_id = "22519301"
+api_hash = "1a503c6dce6195a37e082a88f7e20dd5"
+bot_token = "6960079953:AAFMvhZBsE-FKV-gCaq8oJByGkHFjFhmes8"
+
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
 # Define the directory where videos are saved
-VIDEO_DIR = "./sentvideo_in_telegram/"
-
-# Ensure the directory exists
-if not os.path.exists(VIDEO_DIR):
-    os.makedirs(VIDEO_DIR)
-
+VIDEO_DIR = "/sdcard/sentvideo_in_telegram/"
 # Define YouTube URL pattern
 youtube_url_pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+'
 
@@ -38,6 +33,12 @@ youtube_links_queue = Queue()
 
 # Retry delay in seconds
 RETRY_DELAY = 5
+
+# Function to synchronize system time with NTP server
+def sync_system_time():
+    client = ntplib.NTPClient()
+    response = client.request('pool.ntp.org')
+    os.system(f'date {datetime.utcfromtimestamp(response.tx_time).strftime("%m%d%H%M%Y.%S")}')
 
 # Function to delete all files in the video directory
 def clear_video_directory():
@@ -51,35 +52,6 @@ def clear_video_directory():
             logging.info(f"Deleted file: {file_path}")
         except Exception as e:
             logging.error(f"Failed to delete {file_path}. Reason: {e}")
-
-# Function to check and install FFmpeg if not installed
-def install_ffmpeg():
-    try:
-        subprocess.run(["ffmpeg", "-version"], check=True)
-        logging.info("FFmpeg is already installed.")
-    except subprocess.CalledProcessError:
-        logging.info("FFmpeg is not installed. Installing FFmpeg...")
-        if sys.platform.startswith('linux'):
-            subprocess.run(["apt-get", "update"], check=True)
-            subprocess.run(["apt-get", "install", "-y", "ffmpeg"], check=True)
-        elif sys.platform == "darwin":
-            subprocess.run(["brew", "install", "ffmpeg"], check=True)
-        elif sys.platform == "win32":
-            logging.error("Automatic installation of FFmpeg on Windows is not supported. Please install it manually.")
-        else:
-            logging.error("Unsupported platform. Please install FFmpeg manually.")
-
-# Function to synchronize system time with NTP server
-def synchronize_time():
-    try:
-        client = ntplib.NTPClient()
-        response = client.request('pool.ntp.org')
-        new_time = time.localtime(response.tx_time)
-        os.environ['TZ'] = 'UTC'
-        time.tzset()
-        logging.info(f"System time synchronized to {new_time}")
-    except Exception as e:
-        logging.error(f"Failed to synchronize time: {e}")
 
 # Worker function to process YouTube links
 def process_youtube_links():
@@ -168,11 +140,8 @@ def handle_message(client, message):
 
 # Start the Pyrogram client and the worker thread
 if __name__ == "__main__":
-    # Synchronize system time
-    synchronize_time()
-
-    # Install FFmpeg if not already installed
-    install_ffmpeg()
+    # Synchronize system time at startup
+    sync_system_time()
 
     # Delete the session file each time the bot starts (optional)
     if os.path.exists(session_file_path):
@@ -180,7 +149,7 @@ if __name__ == "__main__":
         logging.info(f"Deleted existing session file: {session_file_path}")
 
     # Start the worker thread
-    worker_thread = Thread(target=process_youtube_links, daemon=True)
+    worker_thread = Thread(target=process_youtube_links)
     worker_thread.start()
 
     app.run()
