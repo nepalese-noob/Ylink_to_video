@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import yt_dlp
-from pyrogram import Client, filters
+from pyrogram import Client, filters, idle
 from threading import Thread
 from queue import Queue
 import time
@@ -230,4 +230,4 @@ if __name__ == "__main__":
     worker_thread.start()
 
     # Keep the client running
-    app.idle()
+    idle()
