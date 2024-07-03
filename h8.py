@@ -9,7 +9,6 @@ import time
 import shutil
 import subprocess
 import sys
-import ntplib
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -68,16 +67,6 @@ def install_ffmpeg():
             logging.error("Automatic installation of FFmpeg on Windows is not supported. Please install it manually.")
         else:
             logging.error("Unsupported platform. Please install FFmpeg manually.")
-
-# Function to synchronize system time with NTP server
-def synchronize_time():
-    try:
-        client = ntplib.NTPClient()
-        response = client.request('pool.ntp.org')
-        os.system(f'date -s @{response.tx_time}')
-        logging.info("System time synchronized with NTP server.")
-    except Exception as e:
-        logging.error(f"Failed to synchronize system time. Reason: {e}")
 
 # Worker function to process YouTube links
 def process_youtube_links():
@@ -163,6 +152,19 @@ def handle_message(client, message):
     # Delete the YouTube link message immediately
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
+
+# Function to synchronize system time
+def synchronize_time():
+    if sys.platform.startswith('linux'):
+        subprocess.run(["sudo", "service", "ntp", "stop"], check=True)
+        subprocess.run(["sudo", "ntpd", "-gq"], check=True)
+        subprocess.run(["sudo", "service", "ntp", "start"], check=True)
+    elif sys.platform == "darwin":
+        subprocess.run(["sudo", "ntpdate", "-u", "time.apple.com"], check=True)
+    elif sys.platform == "win32":
+        logging.error("Automatic time synchronization on Windows is not supported. Please sync time manually.")
+    else:
+        logging.error("Unsupported platform. Please sync time manually.")
 
 # Start the Pyrogram client and the worker thread
 if __name__ == "__main__":
