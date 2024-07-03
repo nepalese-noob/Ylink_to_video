@@ -21,9 +21,8 @@ session_file_path = "my_bot.session"
 api_id = os.getenv("API_ID")
 api_hash = os.getenv("API_HASH")
 bot_token = os.getenv("BOT_TOKEN")
-
-app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token, timedelta=time_delta)
 time_delta = timedelta(hours=0, minutes=0)
+app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token, timedelta=time_delta)
 # Define the directory where videos are saved
 VIDEO_DIR = "./sentvideo_in_telegram/"
 
