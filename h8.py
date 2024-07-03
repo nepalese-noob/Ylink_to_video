@@ -6,7 +6,9 @@ from pyrogram import Client, filters
 from threading import Thread
 from queue import Queue
 import time
-import shutil
+import requests
+import ntplib
+from datetime import datetime
 from flask import Flask
 
 # Configure logging
@@ -52,6 +54,54 @@ def clear_video_directory():
             logging.info(f"Deleted file: {file_path}")
         except Exception as e:
             logging.error(f"Failed to delete {file_path}. Reason: {e}")
+
+# Function to synchronize time
+def synchronize_time():
+    try:
+        # Try to get time from the system
+        system_time = datetime.utcnow()
+        logging.info(f"System time: {system_time}")
+        return system_time
+    except Exception as e:
+        logging.error(f"Failed to get system time: {e}")
+
+    try:
+        # Try to get time from NTP servers
+        client = ntplib.NTPClient()
+        response = client.request('pool.ntp.org')
+        ntp_time = datetime.utcfromtimestamp(response.tx_time)
+        logging.info(f"NTP time: {ntp_time}")
+        return ntp_time
+    except Exception as e:
+        logging.error(f"Failed to get NTP time: {e}")
+
+    try:
+        # Try to get time from websites
+        response = requests.get('http://worldtimeapi.org/api/timezone/Etc/UTC')
+        website_time = datetime.fromisoformat(response.json()['datetime'])
+        logging.info(f"Website time (worldtimeapi): {website_time}")
+        return website_time
+    except Exception as e:
+        logging.error(f"Failed to get time from worldtimeapi: {e}")
+
+    try:
+        response = requests.get('http://worldclockapi.com/api/json/utc/now')
+        website_time = datetime.fromisoformat(response.json()['currentDateTime'])
+        logging.info(f"Website time (worldclockapi): {website_time}")
+        return website_time
+    except Exception as e:
+        logging.error(f"Failed to get time from worldclockapi: {e}")
+
+    try:
+        response = requests.get('https://timeapi.io/api/Time/current/zone?timeZone=UTC')
+        website_time = datetime.fromisoformat(response.json()['dateTime'])
+        logging.info(f"Website time (timeapi.io): {website_time}")
+        return website_time
+    except Exception as e:
+        logging.error(f"Failed to get time from timeapi.io: {e}")
+
+    # If all methods fail, raise an exception
+    raise Exception("Failed to synchronize time from all sources")
 
 # Worker function to process YouTube links
 def process_youtube_links():
@@ -138,32 +188,21 @@ def handle_message(client, message):
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
-def sync_client_time(client):
-    retries = 0
-    while retries < 3:
-        try:
-            # This function will try to synchronize the client time
-            client.invoke('getNearestDc')
-            break
-        except Exception as e:
-            logging.error(f"Failed to sync time: {e}")
-            retries += 1
-            if retries < 3:
-                logging.info(f"Retrying time sync... (Attempt {retries + 1})")
-                time.sleep(RETRY_DELAY)
-            else:
-                logging.error("Max retry attempts reached for time sync.")
-
 if __name__ == "__main__":
     # Start Flask app in a separate thread
     flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))))
     flask_thread.start()
 
+    # Synchronize time before starting the Pyrogram client
+    try:
+        synchronized_time = synchronize_time()
+        logging.info(f"Synchronized time: {synchronized_time}")
+    except Exception as e:
+        logging.error(f"Time synchronization failed: {e}")
+        exit(1)  # Exit if time synchronization fails
+
     # Start the Pyrogram client
     app.start()
-
-    # Synchronize client time after starting the client
-    sync_client_time(app)
 
     # Start the worker thread
     worker_thread = Thread(target=process_youtube_links)
