@@ -7,6 +7,7 @@ from threading import Thread
 from queue import Queue
 import time
 import shutil
+from flask import Flask
 import ntplib
 from datetime import datetime
 
@@ -17,9 +18,9 @@ logging.basicConfig(level=logging.INFO)
 session_file_path = "my_bot.session"
 
 # Initialize the Pyrogram client
-api_id = "22519301"
-api_hash = "1a503c6dce6195a37e082a88f7e20dd5"
-bot_token = "6960079953:AAFMvhZBsE-FKV-gCaq8oJByGkHFjFhmes8"
+api_id = os.environ["API_ID"]
+api_hash = os.environ["API_HASH"]
+bot_token = os.environ["BOT_TOKEN"]
 
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
@@ -34,7 +35,13 @@ youtube_links_queue = Queue()
 # Retry delay in seconds
 RETRY_DELAY = 5
 
-# Function to synchronize system time with NTP server
+# Flask app to keep the web service alive
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def index():
+    return "Telegram Bot is running!"
+
 def sync_system_time():
     client = ntplib.NTPClient()
     response = client.request('pool.ntp.org')
@@ -138,18 +145,17 @@ def handle_message(client, message):
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
-# Start the Pyrogram client and the worker thread
 if __name__ == "__main__":
-    # Synchronize system time at startup
+    # Sync system time
     sync_system_time()
-
-    # Delete the session file each time the bot starts (optional)
-    if os.path.exists(session_file_path):
-        os.remove(session_file_path)
-        logging.info(f"Deleted existing session file: {session_file_path}")
 
     # Start the worker thread
     worker_thread = Thread(target=process_youtube_links)
     worker_thread.start()
 
+    # Start Flask app in a separate thread
+    flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))))
+    flask_thread.start()
+
+    # Start the Pyrogram client
     app.run()
