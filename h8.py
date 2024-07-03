@@ -59,8 +59,8 @@ def install_ffmpeg():
     except subprocess.CalledProcessError:
         logging.info("FFmpeg is not installed. Installing FFmpeg...")
         if sys.platform.startswith('linux'):
-            subprocess.run(["sudo", "apt-get", "update"], check=True)
-            subprocess.run(["sudo", "apt-get", "install", "-y", "ffmpeg"], check=True)
+            subprocess.run(["apt-get", "update"], check=True)
+            subprocess.run(["apt-get", "install", "-y", "ffmpeg"], check=True)
         elif sys.platform == "darwin":
             subprocess.run(["brew", "install", "ffmpeg"], check=True)
         elif sys.platform == "win32":
@@ -156,11 +156,11 @@ def handle_message(client, message):
 # Function to synchronize system time
 def synchronize_time():
     if sys.platform.startswith('linux'):
-        subprocess.run(["sudo", "service", "ntp", "stop"], check=True)
-        subprocess.run(["sudo", "ntpd", "-gq"], check=True)
-        subprocess.run(["sudo", "service", "ntp", "start"], check=True)
+        subprocess.run(["service", "ntp", "stop"], check=True)
+        subprocess.run(["ntpd", "-gq"], check=True)
+        subprocess.run(["service", "ntp", "start"], check=True)
     elif sys.platform == "darwin":
-        subprocess.run(["sudo", "ntpdate", "-u", "time.apple.com"], check=True)
+        subprocess.run(["ntpdate", "-u", "time.apple.com"], check=True)
     elif sys.platform == "win32":
         logging.error("Automatic time synchronization on Windows is not supported. Please sync time manually.")
     else:
