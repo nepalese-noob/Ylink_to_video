@@ -9,7 +9,6 @@ import time
 import shutil
 import subprocess
 import sys
-from datetime import timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,8 +20,8 @@ session_file_path = "my_bot.session"
 api_id = os.getenv("API_ID")
 api_hash = os.getenv("API_HASH")
 bot_token = os.getenv("BOT_TOKEN")
-time_delta = timedelta(hours=0, minutes=0)
-app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token, timedelta=time_delta)
+app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+
 # Define the directory where videos are saved
 VIDEO_DIR = "./sentvideo_in_telegram/"
 
@@ -165,8 +164,7 @@ if __name__ == "__main__":
         logging.info(f"Deleted existing session file: {session_file_path}")
 
     # Start the worker thread
-    worker_thread = Thread(target=process_youtube_links)
+    worker_thread = Thread(target=process_youtube_links, daemon=True)
     worker_thread.start()
 
     app.run()
-            
