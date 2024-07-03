@@ -9,6 +9,7 @@ import time
 import shutil
 import subprocess
 import sys
+import ntplib
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -67,6 +68,16 @@ def install_ffmpeg():
             logging.error("Automatic installation of FFmpeg on Windows is not supported. Please install it manually.")
         else:
             logging.error("Unsupported platform. Please install FFmpeg manually.")
+
+# Function to synchronize system time with NTP server
+def synchronize_time():
+    try:
+        client = ntplib.NTPClient()
+        response = client.request('pool.ntp.org')
+        os.system(f'date -s @{response.tx_time}')
+        logging.info("System time synchronized with NTP server.")
+    except Exception as e:
+        logging.error(f"Failed to synchronize system time. Reason: {e}")
 
 # Worker function to process YouTube links
 def process_youtube_links():
@@ -155,6 +166,9 @@ def handle_message(client, message):
 
 # Start the Pyrogram client and the worker thread
 if __name__ == "__main__":
+    # Synchronize system time
+    synchronize_time()
+
     # Install FFmpeg if not already installed
     install_ffmpeg()
 
