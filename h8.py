@@ -59,8 +59,8 @@ def install_ffmpeg():
     except subprocess.CalledProcessError:
         logging.info("FFmpeg is not installed. Installing FFmpeg...")
         if sys.platform.startswith('linux'):
-            subprocess.run(["apt-get", "update"], check=True)
-            subprocess.run(["apt-get", "install", "-y", "ffmpeg"], check=True)
+            subprocess.run(["sudo", "apt-get", "update"], check=True)
+            subprocess.run(["sudo", "apt-get", "install", "-y", "ffmpeg"], check=True)
         elif sys.platform == "darwin":
             subprocess.run(["brew", "install", "ffmpeg"], check=True)
         elif sys.platform == "win32":
@@ -153,18 +153,13 @@ def handle_message(client, message):
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
-# Function to synchronize system time
+# Function to synchronize system time using systemd
 def synchronize_time():
-    if sys.platform.startswith('linux'):
-        subprocess.run(["service", "ntp", "stop"], check=True)
-        subprocess.run(["ntpd", "-gq"], check=True)
-        subprocess.run(["service", "ntp", "start"], check=True)
-    elif sys.platform == "darwin":
-        subprocess.run(["ntpdate", "-u", "time.apple.com"], check=True)
-    elif sys.platform == "win32":
-        logging.error("Automatic time synchronization on Windows is not supported. Please sync time manually.")
-    else:
-        logging.error("Unsupported platform. Please sync time manually.")
+    try:
+        subprocess.run(["sudo", "timedatectl", "set-ntp", "true"], check=True)
+        logging.info("Time synchronized successfully.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Failed to synchronize time: {e}")
 
 # Start the Pyrogram client and the worker thread
 if __name__ == "__main__":
