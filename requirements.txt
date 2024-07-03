@@ -1,0 +1,3 @@
+pyrogram==2.0.106
+yt-dlp==2023.06.22
+shutilwhich==1.1.0
