@@ -3,3 +3,4 @@ yt-dlp==2023.07.06
 shutilwhich==1.1.0
 ntplib
 tgcrypto
+flask
