@@ -23,7 +23,7 @@ bot_token = os.environ["BOT_TOKEN"]
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
 # Define the directory where videos are saved
-VIDEO_DIR = "/sdcard/sentvideo_in_telegram/"
+VIDEO_DIR = "./sentvideo_in_telegram/"
 # Define YouTube URL pattern
 youtube_url_pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+'
 
@@ -138,7 +138,26 @@ def handle_message(client, message):
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
+def sync_client_time(client):
+    retries = 0
+    while retries < 3:
+        try:
+            # This function will try to synchronize the client time
+            client.invoke('getNearestDc')
+            break
+        except Exception as e:
+            logging.error(f"Failed to sync time: {e}")
+            retries += 1
+            if retries < 3:
+                logging.info(f"Retrying time sync... (Attempt {retries + 1})")
+                time.sleep(RETRY_DELAY)
+            else:
+                logging.error("Max retry attempts reached for time sync.")
+
 if __name__ == "__main__":
+    # Synchronize client time before starting the bot
+    sync_client_time(app)
+
     # Start the worker thread
     worker_thread = Thread(target=process_youtube_links)
     worker_thread.start()
