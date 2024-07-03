@@ -9,6 +9,7 @@ import time
 import shutil
 import subprocess
 import sys
+from datetime import timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,7 +23,7 @@ api_hash = os.getenv("API_HASH")
 bot_token = os.getenv("BOT_TOKEN")
 
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
-
+time_delta = timedelta(hours=0, minutes=0)
 # Define the directory where videos are saved
 VIDEO_DIR = "./sentvideo_in_telegram/"
 
