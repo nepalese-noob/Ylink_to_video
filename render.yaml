@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: youtube-telegram-bot
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python h8.py"
+    envVars:
+      - key: API_ID
+        value: "22519301"
+      - key: API_HASH
+        value: "1a503c6dce6195a37e082a88f7e20dd5"
+      - key: BOT_TOKEN
+        value: "6960079953:AAFMvhZBsE-FKV-gCaq8oJByGkHFjFhmes8"
+        
