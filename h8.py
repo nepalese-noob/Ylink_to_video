@@ -17,14 +17,19 @@ logging.basicConfig(level=logging.INFO)
 session_file_path = "my_bot.session"
 
 # Initialize the Pyrogram client
-api_id = "22519301"
-api_hash = "1a503c6dce6195a37e082a88f7e20dd5"
-bot_token = "6960079953:AAFMvhZBsE-FKV-gCaq8oJByGkHFjFhmes8"
+api_id = os.getenv("API_ID")
+api_hash = os.getenv("API_HASH")
+bot_token = os.getenv("BOT_TOKEN")
 
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
 # Define the directory where videos are saved
-VIDEO_DIR = "/sdcard/sentvideo_in_telegram/"
+VIDEO_DIR = "./sentvideo_in_telegram/"
+
+# Ensure the directory exists
+if not os.path.exists(VIDEO_DIR):
+    os.makedirs(VIDEO_DIR)
+
 # Define YouTube URL pattern
 youtube_url_pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+'
 
@@ -164,3 +169,4 @@ if __name__ == "__main__":
     worker_thread.start()
 
     app.run()
+            
