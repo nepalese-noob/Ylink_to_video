@@ -10,6 +10,7 @@ import requests
 import ntplib
 from datetime import datetime
 from flask import Flask
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -211,7 +212,7 @@ def handle_message(client, message):
 
 if __name__ == "__main__":
     # Start Flask app in a separate thread
-    flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))))
+    flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))), daemon=True)
     flask_thread.start()
 
     # Synchronize time before starting the Pyrogram client
@@ -226,7 +227,7 @@ if __name__ == "__main__":
     app.start()
 
     # Start the worker thread
-    worker_thread = Thread(target=process_youtube_links)
+    worker_thread = Thread(target=process_youtube_links, daemon=True)
     worker_thread.start()
 
     # Keep the client running
