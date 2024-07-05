@@ -35,18 +35,51 @@ youtube_links_queue = Queue()
 # Retry delay in seconds
 RETRY_DELAY = 5
 
+# List of websites to get current time
+time_api_urls = [
+    'http://worldtimeapi.org/api/timezone/Etc/UTC',
+    'https://timeapi.io/api/Time/current/zone?timeZone=Etc/UTC',
+    'https://worldtimeapi.org/api/timezone/Etc/GMT',
+    'http://worldclockapi.com/api/json/utc/now',
+    'https://www.timeapi.io/api/Time/current/zone?timeZone=Etc/GMT',
+    'https://www.timeapi.io/api/Time/current/zone?timeZone=UTC',
+    'https://worldtimeapi.org/api/ip',
+    'https://worldtimeapi.org/api/timezone/Etc/UTC',
+    'https://timeapi.io/api/Time/current/zone?timeZone=Etc/GMT',
+    'http://worldclockapi.com/api/json/utc/now',
+    'http://worldclockapi.com/api/json/est/now',
+    'http://worldclockapi.com/api/json/pst/now',
+    'http://worldtimeapi.org/api/timezone/Etc/Greenwich',
+    'http://worldtimeapi.org/api/timezone/Etc/GMT+0',
+    'http://worldtimeapi.org/api/timezone/Etc/GMT0',
+    'http://worldtimeapi.org/api/timezone/Etc/UCT',
+    'http://worldtimeapi.org/api/timezone/Etc/Universal',
+    'http://worldtimeapi.org/api/timezone/Etc/Zulu',
+    'https://timeapi.io/api/Time/current/zone?timeZone=Etc/Greenwich',
+    'https://timeapi.io/api/Time/current/zone?timeZone=Etc/GMT+0',
+    'https://timeapi.io/api/Time/current/zone?timeZone=Etc/GMT0',
+    'https://timeapi.io/api/Time/current/zone?timeZone=Etc/UCT',
+    'https://timeapi.io/api/Time/current/zone?timeZone=Etc/Universal',
+    'https://timeapi.io/api/Time/current/zone?timeZone=Etc/Zulu',
+]
+
+
 # Function to get current time from an API with retry logic
 def get_current_time(retries=5):
     for i in range(retries):
-        try:
-            response = requests.get('http://worldtimeapi.org/api/timezone/Etc/UTC')
-            response.raise_for_status()
-            current_time = response.json()['unixtime']
-            return current_time
-        except requests.RequestException as e:
-            logging.error(f"Failed to get time from API: {e}")
-            if i < retries - 1:
-                sleep_for(RETRY_DELAY * (2 ** i))  # Exponential backoff
+        for url in time_api_urls:
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                if 'unixtime' in response.json():
+                    current_time = response.json()['unixtime']
+                else:
+                    current_time = response.json()['currentFileTime']
+                return current_time
+            except requests.RequestException as e:
+                logging.error(f"Failed to get time from API {url}: {e}")
+        if i < retries - 1:
+            sleep_for(RETRY_DELAY * (2 ** i))  # Exponential backoff
     return None
 
 # Function to sleep for a given number of seconds using external time
