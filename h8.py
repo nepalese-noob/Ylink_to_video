@@ -2,14 +2,10 @@ import logging
 import os
 import re
 import yt_dlp
-from pyrogram import Client, filters, idle
+from pyrogram import Client, filters, errors
 from threading import Thread
 from queue import Queue
-import time
 import requests
-import ntplib
-from datetime import datetime
-from flask import Flask
 import shutil
 
 # Configure logging
@@ -19,14 +15,15 @@ logging.basicConfig(level=logging.INFO)
 session_file_path = "my_bot.session"
 
 # Initialize the Pyrogram client
-api_id = os.environ["API_ID"]
-api_hash = os.environ["API_HASH"]
-bot_token = os.environ["BOT_TOKEN"]
-
+api_id = "22519301"
+api_hash = "1a503c6dce6195a37e082a88f7e20dd5"
+bot_token = "6960079953:AAFMvhZBsE-FKV-gCaq8oJByGkHFjFhmes8"
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
-# Define the directory where videos are saved
-VIDEO_DIR = "sent_video_in_telegram/"
+# Define the directory where videos are saved (in the same directory as the script)
+VIDEO_DIR = os.path.join(os.path.dirname(__file__), "sentvideo_in_telegram/")
+os.makedirs(VIDEO_DIR, exist_ok=True)  # Create the directory if it doesn't exist
+
 # Define YouTube URL pattern
 youtube_url_pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+'
 
@@ -36,12 +33,28 @@ youtube_links_queue = Queue()
 # Retry delay in seconds
 RETRY_DELAY = 5
 
-# Flask app to keep the web service alive
-flask_app = Flask(__name__)
+# Function to get current time from an API
+def get_current_time():
+    try:
+        response = requests.get('http://worldtimeapi.org/api/timezone/Etc/UTC')
+        response.raise_for_status()
+        current_time = response.json()['unixtime']
+        return current_time
+    except requests.RequestException as e:
+        logging.error(f"Failed to get time from API: {e}")
+        return None
 
-@flask_app.route('/')
-def index():
-    return "Telegram Bot is running!"
+# Function to sleep for a given number of seconds using external time
+def sleep_for(seconds):
+    start_time = get_current_time()
+    if start_time is None:
+        return  # If the time cannot be fetched, do not sleep
+    while True:
+        current_time = get_current_time()
+        if current_time is None:
+            return  # If the time cannot be fetched, break the loop
+        if current_time - start_time >= seconds:
+            break
 
 # Function to delete all files in the video directory
 def clear_video_directory():
@@ -55,75 +68,6 @@ def clear_video_directory():
             logging.info(f"Deleted file: {file_path}")
         except Exception as e:
             logging.error(f"Failed to delete {file_path}. Reason: {e}")
-
-# Function to get time from websites
-def get_time_from_websites():
-    try:
-        response = requests.get('http://worldtimeapi.org/api/timezone/Etc/UTC')
-        website_time = datetime.fromisoformat(response.json()['datetime'])
-        logging.info(f"Website time (worldtimeapi): {website_time}")
-        return website_time
-    except Exception as e:
-        logging.error(f"Failed to get time from worldtimeapi: {e}")
-
-    try:
-        response = requests.get('http://worldclockapi.com/api/json/utc/now')
-        website_time = datetime.fromisoformat(response.json()['currentDateTime'])
-        logging.info(f"Website time (worldclockapi): {website_time}")
-        return website_time
-    except Exception as e:
-        logging.error(f"Failed to get time from worldclockapi: {e}")
-
-    try:
-        response = requests.get('https://timeapi.io/api/Time/current/zone?timeZone=UTC')
-        website_time = datetime.fromisoformat(response.json()['dateTime'])
-        logging.info(f"Website time (timeapi.io): {website_time}")
-        return website_time
-    except Exception as e:
-        logging.error(f"Failed to get time from timeapi.io: {e}")
-
-    return None
-
-# Function to get time from NTP servers
-def get_time_from_ntp():
-    try:
-        client = ntplib.NTPClient()
-        response = client.request('pool.ntp.org')
-        ntp_time = datetime.utcfromtimestamp(response.tx_time)
-        logging.info(f"NTP time: {ntp_time}")
-        return ntp_time
-    except Exception as e:
-        logging.error(f"Failed to get NTP time: {e}")
-
-    return None
-
-# Function to get time from the system
-def get_time_from_system():
-    try:
-        system_time = datetime.utcnow()
-        logging.info(f"System time: {system_time}")
-        return system_time
-    except Exception as e:
-        logging.error(f"Failed to get system time: {e}")
-
-    return None
-
-# Function to synchronize time
-def synchronize_time():
-    time = get_time_from_websites()
-    if time:
-        return time
-
-    time = get_time_from_ntp()
-    if time:
-        return time
-
-    time = get_time_from_system()
-    if time:
-        return time
-
-    # If all methods fail, raise an exception
-    raise Exception("Failed to synchronize time from all sources")
 
 # Worker function to process YouTube links
 def process_youtube_links():
@@ -147,13 +91,13 @@ def process_youtube_links():
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         info_dict = ydl.extract_info(youtube_url, download=True)
                         video_title = info_dict.get('title', None)
-                    break
+                        break
                 except Exception as e:
                     logging.error(f"Failed to download video: {e}")
                     retries += 1
                     if retries < 3:
                         logging.info(f"Retrying download... (Attempt {retries + 1})")
-                        time.sleep(RETRY_DELAY)
+                        sleep_for(RETRY_DELAY)
                     else:
                         logging.error("Max retry attempts reached for video download.")
                         youtube_links_queue.task_done()
@@ -189,7 +133,7 @@ def process_youtube_links():
                     retries += 1
                     if retries < 3:
                         logging.info(f"Retrying to send video... (Attempt {retries + 1})")
-                        time.sleep(RETRY_DELAY)
+                        sleep_for(RETRY_DELAY)
                     else:
                         logging.error("Max retry attempts reached for sending video.")
                         youtube_links_queue.task_done()
@@ -210,25 +154,20 @@ def handle_message(client, message):
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
+# Start the Pyrogram client and the worker thread
 if __name__ == "__main__":
-    # Start Flask app in a separate thread
-    flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))), daemon=True)
-    flask_thread.start()
+    while True:
+        try:
+            # Delete the session file each time the bot starts (optional)
+            if os.path.exists(session_file_path):
+                os.remove(session_file_path)
+                logging.info(f"Deleted existing session file: {session_file_path}")
 
-    # Synchronize time before starting the Pyrogram client
-    try:
-        synchronized_time = synchronize_time()
-        logging.info(f"Synchronized time: {synchronized_time}")
-    except Exception as e:
-        logging.error(f"Time synchronization failed: {e}")
-        exit(1)  # Exit if time synchronization fails
+            # Start the worker thread
+            worker_thread = Thread(target=process_youtube_links)
+            worker_thread.start()
 
-    # Start the Pyrogram client
-    app.start()
-
-    # Start the worker thread
-    worker_thread = Thread(target=process_youtube_links, daemon=True)
-    worker_thread.start()
-
-    # Keep the client running
-    idle()
+            app.run()
+        except Exception as e:
+            logging.error(f"Bot encountered an error: {e}. Restarting...")
+            sleep_for(RETRY_DELAY)  # Wait before restarting the bot
