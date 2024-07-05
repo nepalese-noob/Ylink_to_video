@@ -8,6 +8,7 @@ from queue import Queue
 import requests
 import shutil
 from flask import Flask
+import asyncio
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -167,6 +168,8 @@ def index():
 def start_bot():
     while True:
         try:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            loop = asyncio.get_event_loop()
             # Delete the session file each time the bot starts (optional)
             if os.path.exists(session_file_path):
                 os.remove(session_file_path)
@@ -187,3 +190,4 @@ Thread(target=start_bot).start()
 # Run the Flask app
 if __name__ == "__main__":
     flask_app.run(host="0.0.0.0", port=5000)
+            
