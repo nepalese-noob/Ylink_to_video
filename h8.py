@@ -7,6 +7,7 @@ from threading import Thread
 from queue import Queue
 import requests
 import shutil
+from flask import Flask
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -154,8 +155,16 @@ def handle_message(client, message):
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
-# Start the Pyrogram client and the worker thread
-if __name__ == "__main__":
+# Create Flask app
+flask_app = Flask(__name__)
+
+# Endpoint to check the status of the bot
+@flask_app.route('/')
+def index():
+    return "Bot is running!"
+
+# Start the worker thread and the Pyrogram client
+def start_bot():
     while True:
         try:
             # Delete the session file each time the bot starts (optional)
@@ -171,3 +180,10 @@ if __name__ == "__main__":
         except Exception as e:
             logging.error(f"Bot encountered an error: {e}. Restarting...")
             sleep_for(RETRY_DELAY)  # Wait before restarting the bot
+
+# Start the bot in a separate thread
+Thread(target=start_bot).start()
+
+# Run the Flask app
+if __name__ == "__main__":
+    flask_app.run(host="0.0.0.0", port=5000)
