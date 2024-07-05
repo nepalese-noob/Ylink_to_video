@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import yt_dlp
-from pyrogram import Client, filters, errors
+from pyrogram import Client, filters
 from threading import Thread
 from queue import Queue
 import requests
@@ -35,16 +35,19 @@ youtube_links_queue = Queue()
 # Retry delay in seconds
 RETRY_DELAY = 5
 
-# Function to get current time from an API
-def get_current_time():
-    try:
-        response = requests.get('http://worldtimeapi.org/api/timezone/Etc/UTC')
-        response.raise_for_status()
-        current_time = response.json()['unixtime']
-        return current_time
-    except requests.RequestException as e:
-        logging.error(f"Failed to get time from API: {e}")
-        return None
+# Function to get current time from an API with retry logic
+def get_current_time(retries=5):
+    for i in range(retries):
+        try:
+            response = requests.get('http://worldtimeapi.org/api/timezone/Etc/UTC')
+            response.raise_for_status()
+            current_time = response.json()['unixtime']
+            return current_time
+        except requests.RequestException as e:
+            logging.error(f"Failed to get time from API: {e}")
+            if i < retries - 1:
+                sleep_for(RETRY_DELAY * (2 ** i))  # Exponential backoff
+    return None
 
 # Function to sleep for a given number of seconds using external time
 def sleep_for(seconds):
@@ -179,7 +182,11 @@ def start_bot():
             worker_thread = Thread(target=process_youtube_links)
             worker_thread.start()
 
-            app.run()
+            # Start the Pyrogram client
+            with app:
+                app.start()
+                app.idle()  # Run the bot until manually stopped
+
         except Exception as e:
             logging.error(f"Bot encountered an error: {e}. Restarting...")
             sleep_for(RETRY_DELAY)  # Wait before restarting the bot
@@ -190,4 +197,3 @@ Thread(target=start_bot).start()
 # Run the Flask app
 if __name__ == "__main__":
     flask_app.run(host="0.0.0.0", port=5000)
-            
