@@ -35,22 +35,21 @@ youtube_links_queue = Queue()
 # Retry delay in seconds
 RETRY_DELAY = 5
 
-# List of websites to get current time
+# List of time API URLs
 time_api_urls = [
     'http://worldtimeapi.org/api/timezone/Etc/UTC',
     'https://timeapi.io/api/Time/current/zone?timeZone=Etc/UTC',
     'https://worldtimeapi.org/api/timezone/Etc/GMT',
     'http://worldclockapi.com/api/json/utc/now',
     'https://www.timeapi.io/api/Time/current/zone?timeZone=Etc/GMT',
+    'https://api.timezonedb.com/v2.1/get-time-zone?key=0H0RX6SCXA7T&format=json&by=zone&zone=Etc/UTC',
     'https://www.timeapi.io/api/Time/current/zone?timeZone=UTC',
     'https://worldtimeapi.org/api/ip',
-    'https://worldtimeapi.org/api/timezone/Etc/UTC',
-    'https://timeapi.io/api/Time/current/zone?timeZone=Etc/GMT',
-    'http://worldclockapi.com/api/json/utc/now',
+    'http://worldtimeapi.org/api/timezone/Etc/GMT+0',
     'http://worldclockapi.com/api/json/est/now',
     'http://worldclockapi.com/api/json/pst/now',
+    'https://api.ipgeolocation.io/timezone?apiKey=3e90fca262914fc98fe4a8ded86b52b6&tz=Etc/UTC',
     'http://worldtimeapi.org/api/timezone/Etc/Greenwich',
-    'http://worldtimeapi.org/api/timezone/Etc/GMT+0',
     'http://worldtimeapi.org/api/timezone/Etc/GMT0',
     'http://worldtimeapi.org/api/timezone/Etc/UCT',
     'http://worldtimeapi.org/api/timezone/Etc/Universal',
@@ -61,8 +60,11 @@ time_api_urls = [
     'https://timeapi.io/api/Time/current/zone?timeZone=Etc/UCT',
     'https://timeapi.io/api/Time/current/zone?timeZone=Etc/Universal',
     'https://timeapi.io/api/Time/current/zone?timeZone=Etc/Zulu',
+    'https://api.ipgeolocation.io/timezone?apiKey=3e90fca262914fc98fe4a8ded86b52b6&tz=Etc/GMT',
+    'https://api.ipgeolocation.io/timezone?apiKey=3e90fca262914fc98fe4a8ded86b52b6&tz=Etc/Greenwich',
+    'https://api.ipgeolocation.io/timezone?apiKey=3e90fca262914fc98fe4a8ded86b52b6&tz=Etc/GMT+0',
+    'https://api.ipgeolocation.io/timezone?apiKey=3e90fca262914fc98fe4a8ded86b52b6&tz=Etc/GMT0',
 ]
-
 
 # Function to get current time from an API with retry logic
 def get_current_time(retries=5):
@@ -71,13 +73,11 @@ def get_current_time(retries=5):
             try:
                 response = requests.get(url)
                 response.raise_for_status()
-                if 'unixtime' in response.json():
-                    current_time = response.json()['unixtime']
-                else:
-                    current_time = response.json()['currentFileTime']
-                return current_time
+                current_time = response.json().get('unixtime') or response.json().get('currentFileTime')
+                if current_time is not None:
+                    return current_time
             except requests.RequestException as e:
-                logging.error(f"Failed to get time from API {url}: {e}")
+                logging.error(f"Failed to get time from {url}: {e}")
         if i < retries - 1:
             sleep_for(RETRY_DELAY * (2 ** i))  # Exponential backoff
     return None
@@ -201,32 +201,32 @@ def index():
     return "Bot is running!"
 
 # Start the worker thread and the Pyrogram client
-def start_bot():
+async def start_bot():
+    # Delete the session file each time the bot starts (optional)
+    if os.path.exists(session_file_path):
+        os.remove(session_file_path)
+        logging.info(f"Deleted existing session file: {session_file_path}")
+
+    # Start the worker thread
+    worker_thread = Thread(target=process_youtube_links)
+    worker_thread.start()
+
     while True:
         try:
-            asyncio.set_event_loop(asyncio.new_event_loop())
-            loop = asyncio.get_event_loop()
-            # Delete the session file each time the bot starts (optional)
-            if os.path.exists(session_file_path):
-                os.remove(session_file_path)
-                logging.info(f"Deleted existing session file: {session_file_path}")
-
-            # Start the worker thread
-            worker_thread = Thread(target=process_youtube_links)
-            worker_thread.start()
-
-            # Start the Pyrogram client
-            with app:
-                app.start()
-                app.idle()  # Run the bot until manually stopped
-
+            await app.start()
+            await app.idle()  # Run the bot until manually stopped
         except Exception as e:
             logging.error(f"Bot encountered an error: {e}. Restarting...")
+            await app.stop()
             sleep_for(RETRY_DELAY)  # Wait before restarting the bot
 
 # Start the bot in a separate thread
-Thread(target=start_bot).start()
+def run_bot():
+    asyncio.run(start_bot())
+
+Thread(target=run_bot).start()
 
 # Run the Flask app
 if __name__ == "__main__":
     flask_app.run(host="0.0.0.0", port=5000)
+    
