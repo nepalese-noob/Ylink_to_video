@@ -4,7 +4,7 @@ import re
 import yt_dlp
 from pyrogram import Client, filters
 from threading import Thread
-from queue import Queue
+from queue import Queue, Empty
 import requests
 import shutil
 from flask import Flask
@@ -111,7 +111,7 @@ def clear_video_directory():
 def process_youtube_links():
     while True:
         try:
-            chat_id, youtube_url = youtube_links_queue.get()  # Get the next item from the queue
+            chat_id, youtube_url = youtube_links_queue.get(timeout=10)  # Get the next item from the queue
 
             # Download the video using yt-dlp
             ydl_opts = {
@@ -179,6 +179,8 @@ def process_youtube_links():
 
             youtube_links_queue.task_done()
 
+        except Empty:
+            continue
         except Exception as e:
             logging.error(f"Unexpected error in processing: {e}")
 
@@ -229,4 +231,3 @@ Thread(target=run_bot).start()
 # Run the Flask app
 if __name__ == "__main__":
     flask_app.run(host="0.0.0.0", port=5000)
-    
