@@ -3,6 +3,7 @@ import re
 import threading
 import time
 import random
+from flask import Flask
 
 # Initialize the bot with your token
 API_TOKEN = '7081682015:AAEhCpMwxPbUj_il87hCI3cdCdijanyeHNg'
@@ -11,6 +12,9 @@ bot = telebot.TeleBot(API_TOKEN, parse_mode='MarkdownV2')
 # File to save Q&A
 QA_FILE = 'qa.txt'
 chat_id = -1001597616235  # Your group chat ID
+
+# Initialize Flask app
+app = Flask(__name__)
 
 # Function to escape MarkdownV2 reserved characters
 def escape_markdown_v2(text):
@@ -98,5 +102,14 @@ def run_bot():
             print(f"Error occurred: {e}. Restarting bot in 5 seconds...")
             time.sleep(5)
 
-# Start the bot
-run_bot()
+# Start the bot polling in a separate thread
+threading.Thread(target=run_bot).start()
+
+# Define a simple Flask route to keep the app running
+@app.route('/')
+def index():
+    return 'Bot is running', 200
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+    
