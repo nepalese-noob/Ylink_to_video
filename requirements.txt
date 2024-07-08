@@ -1,7 +1,2 @@
-pyrogram
-yt-dlp
-shutilwhich
-ntplib
-tgcrypto
 flask
 requests
