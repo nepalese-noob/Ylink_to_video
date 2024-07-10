@@ -73,7 +73,7 @@ def send_qa_pairs():
                 escaped_question = escape_markdown_v2(question)
                 escaped_answer = escape_markdown_v2(answer)
                 bot.send_message(chat_id, f'{escaped_question} 👉 ||{escaped_answer}||')
-        time.sleep(1200)  # 1200 seconds = 20 minutes
+        time.sleep(120)  # 1200 seconds = 20 minutes
 
 # Start the Q&A sending thread
 threading.Thread(target=send_qa_pairs).start()
@@ -110,7 +110,4 @@ threading.Thread(target=run_bot).start()
 @app.route('/')
 def index():
     return 'Bot is running', 200
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
     
