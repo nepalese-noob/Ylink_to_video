@@ -1,3 +1,4 @@
+import os
 import telebot
 import re
 import threading
@@ -5,13 +6,13 @@ import time
 import random
 from flask import Flask
 
-# Initialize the bot with your token
+# Initialize the bot with your token from environment variables
 API_TOKEN = '7081682015:AAEhCpMwxPbUj_il87hCI3cdCdijanyeHNg'
 bot = telebot.TeleBot(API_TOKEN, parse_mode='MarkdownV2')
 
 # File to save Q&A
 QA_FILE = 'qa.txt'
-chat_id = -1001597616235  # Your group chat ID
+chat_id = int(os.getenv('CHAT_ID', '-1001597616235'))  # Your group chat ID from environment variables
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -62,7 +63,7 @@ def handle_message(message):
     else:
         bot.reply_to(message, escape_markdown_v2(""))
 
-# Function to send random Q&A pairs every minute
+# Function to send random Q&A pairs every 20 minutes
 def send_qa_pairs():
     while True:
         qa_pairs = read_qa_pairs()
@@ -72,7 +73,7 @@ def send_qa_pairs():
                 escaped_question = escape_markdown_v2(question)
                 escaped_answer = escape_markdown_v2(answer)
                 bot.send_message(chat_id, f'{escaped_question} 👉 ||{escaped_answer}||')
-        time.sleep(1200)
+        time.sleep(60)  # 1200 seconds = 20 minutes
 
 # Start the Q&A sending thread
 threading.Thread(target=send_qa_pairs).start()
@@ -111,5 +112,5 @@ def index():
     return 'Bot is running', 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
     
