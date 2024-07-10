@@ -72,7 +72,7 @@ def send_qa_pairs():
                 escaped_question = escape_markdown_v2(question)
                 escaped_answer = escape_markdown_v2(answer)
                 bot.send_message(chat_id, f'{escaped_question} 👉 ||{escaped_answer}||')
-        time.sleep(3600)
+        time.sleep(1200)
 
 # Start the Q&A sending thread
 threading.Thread(target=send_qa_pairs).start()
