@@ -17,6 +17,9 @@ chat_id = int(os.getenv('CHAT_ID', '-1001597616235'))  # Your group chat ID from
 # Initialize Flask app
 app = Flask(__name__)
 
+# Lock file to prevent multiple instances
+LOCK_FILE = '/tmp/bot.lock'
+
 # Function to escape MarkdownV2 reserved characters
 def escape_markdown_v2(text):
     escape_chars = r'_*[]()~`>#+-=|{}.!'
@@ -73,7 +76,7 @@ def send_qa_pairs():
                 escaped_question = escape_markdown_v2(question)
                 escaped_answer = escape_markdown_v2(answer)
                 bot.send_message(chat_id, f'{escaped_question} 👉 ||{escaped_answer}||')
-        time.sleep(120)  # 1200 seconds = 20 minutes
+        time.sleep(1200)  # 1200 seconds = 20 minutes
 
 # Start the Q&A sending thread
 threading.Thread(target=send_qa_pairs).start()
@@ -94,14 +97,40 @@ def handle_command(message):
 
     bot.reply_to(message, response)
 
+# Function to check if another instance is running
+def is_bot_running():
+    return os.path.exists(LOCK_FILE)
+
+# Function to create a lock file
+def create_lock_file():
+    with open(LOCK_FILE, 'w') as f:
+        f.write('')
+
+# Function to remove the lock file
+def remove_lock_file():
+    if os.path.exists(LOCK_FILE):
+        os.remove(LOCK_FILE)
+
 # Function to handle bot polling with reconnection
 def run_bot():
-    while True:
-        try:
-            bot.polling()
-        except Exception as e:
-            print(f"Error occurred: {e}. Restarting bot in 5 seconds...")
-            time.sleep(5)
+    if is_bot_running():
+        print("Another instance of the bot is running. Exiting...")
+        return
+
+    create_lock_file()
+    try:
+        while True:
+            try:
+                bot.polling()
+            except telebot.apihelper.ApiTelegramException as e:
+                if e.error_code == 409:
+                    print("Another instance of the bot is running. Exiting...")
+                    break
+                else:
+                    print(f"Error occurred: {e}. Restarting bot in 5 seconds...")
+                    time.sleep(5)
+    finally:
+        remove_lock_file()
 
 # Start the bot polling in a separate thread
 threading.Thread(target=run_bot).start()
