@@ -7,7 +7,8 @@ from threading import Thread
 from queue import Queue
 import time
 import shutil
-from flask import Flask, request
+from flask import Flask, request, jsonify
+import asyncio
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -150,8 +151,8 @@ def index():
 def webhook():
     update = request.get_json()
     logging.info(f"Received update: {update}")
-    app.process_update(update)
-    return "ok", 200
+    asyncio.run(app.receive_update(update))
+    return jsonify(ok=True)
 
 if __name__ == "__main__":
     # Delete the session file each time the bot starts (optional)
