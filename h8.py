@@ -1,142 +1,164 @@
+import logging
 import os
-import telebot
 import re
-import threading
+import yt_dlp
+from pyrogram import Client, filters
+from threading import Thread
+from queue import Queue
 import time
-import random
-from flask import Flask
+import shutil
+from flask import Flask, request
 
-# Initialize the bot with your token from environment variables
-API_TOKEN = '7081682015:AAEhCpMwxPbUj_il87hCI3cdCdijanyeHNg'
-bot = telebot.TeleBot(API_TOKEN, parse_mode='MarkdownV2')
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
-# File to save Q&A
-QA_FILE = 'qa.txt'
-chat_id = int(os.getenv('CHAT_ID', '-1001597616235'))  # Your group chat ID from environment variables
+# Define the path to the session file
+session_file_path = "my_bot.session"
 
-# Initialize Flask app
-app = Flask(__name__)
+# Initialize the Pyrogram client
+api_id = os.getenv("API_ID")
+api_hash = os.getenv("API_HASH")
+bot_token = os.getenv("BOT_TOKEN")
 
-# Lock file to prevent multiple instances
-LOCK_FILE = '/tmp/bot.lock'
+app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
-# Function to escape MarkdownV2 reserved characters
-def escape_markdown_v2(text):
-    escape_chars = r'_*[]()~`>#+-=|{}.!'
-    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+# Define the directory where videos are saved
+VIDEO_DIR = "/tmp/sentvideo_in_telegram/"
 
-# Function to read Q&A pairs from file
-def read_qa_pairs():
-    qa_pairs = []
-    try:
-        with open(QA_FILE, 'r', encoding='utf-8') as f:
-            for line in f:
-                if '=' in line:
-                    question, answer = line.split('=', 1)
-                    qa_pairs.append((question.strip(), answer.strip()))
-    except FileNotFoundError:
-        pass
-    return qa_pairs
+# Create the directory if it doesn't exist
+if not os.path.exists(VIDEO_DIR):
+    os.makedirs(VIDEO_DIR)
 
-# Function to parse Q&A messages
-def parse_qa_message(message):
-    lines = message.split('\n')
-    qa_pairs = []
-    qa_pattern = re.compile(r'(.+?)[👉=⇒→÷>](.+)')
+# Define YouTube URL pattern
+youtube_url_pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+'
 
-    for line in lines:
-        match = qa_pattern.search(line)
-        if match:
-            question, answer = match.groups()
-            question = question.strip()
-            answer = answer.strip()
-            qa_pairs.append((question, answer))
+# Queue to hold tuples of (chat_id, YouTube link)
+youtube_links_queue = Queue()
 
-    return qa_pairs
+# Retry delay in seconds
+RETRY_DELAY = 5
 
-# Handler to save Q&A pairs
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    qa_pairs = parse_qa_message(message.text)
-    if qa_pairs:
-        with open(QA_FILE, 'a', encoding='utf-8') as f:
-            for question, answer in qa_pairs:
-                f.write(f'{question} = {answer}\n')
-        bot.reply_to(message, escape_markdown_v2("Q&A pairs saved."))
-    else:
-        bot.reply_to(message, escape_markdown_v2(""))
+# Function to delete all files in the video directory
+def clear_video_directory():
+    for filename in os.listdir(VIDEO_DIR):
+        file_path = os.path.join(VIDEO_DIR, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+            logging.info(f"Deleted file: {file_path}")
+        except Exception as e:
+            logging.error(f"Failed to delete {file_path}. Reason: {e}")
 
-# Function to send random Q&A pairs every 20 minutes
-def send_qa_pairs():
+# Worker function to process YouTube links
+def process_youtube_links():
     while True:
-        qa_pairs = read_qa_pairs()
-        if qa_pairs:
-            question, answer = random.choice(qa_pairs)
-            if chat_id:
-                escaped_question = escape_markdown_v2(question)
-                escaped_answer = escape_markdown_v2(answer)
-                bot.send_message(chat_id, f'{escaped_question} 👉 ||{escaped_answer}||')
-        time.sleep(1200)  # 1200 seconds = 20 minutes
+        try:
+            chat_id, youtube_url = youtube_links_queue.get()  # Get the next item from the queue
 
-# Start the Q&A sending thread
-threading.Thread(target=send_qa_pairs).start()
+            # Download the video using yt-dlp
+            ydl_opts = {
+                'format': 'best',
+                'outtmpl': VIDEO_DIR + '%(title)s.%(ext)s',
+                'postprocessors': [{
+                    'key': 'FFmpegMetadata'
+                }]
+            }
 
-@bot.message_handler(commands=['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'])
-def handle_command(message):
-    qa_pairs = read_qa_pairs()
-    num_pairs = int(message.text[1:])
-    response = ""
-
-    # Get random sample of Q&A pairs
-    random_qa_pairs = random.sample(qa_pairs, min(num_pairs, len(qa_pairs)))
-
-    for question, answer in random_qa_pairs:
-        escaped_question = escape_markdown_v2(question)
-        escaped_answer = escape_markdown_v2(answer)
-        response += f'{escaped_question} 👉 ||{escaped_answer}||\n'
-
-    bot.reply_to(message, response)
-
-# Function to check if another instance is running
-def is_bot_running():
-    return os.path.exists(LOCK_FILE)
-
-# Function to create a lock file
-def create_lock_file():
-    with open(LOCK_FILE, 'w') as f:
-        f.write('')
-
-# Function to remove the lock file
-def remove_lock_file():
-    if os.path.exists(LOCK_FILE):
-        os.remove(LOCK_FILE)
-
-# Function to handle bot polling with reconnection
-def run_bot():
-    if is_bot_running():
-        print("Another instance of the bot is running. Exiting...")
-        return
-
-    create_lock_file()
-    try:
-        while True:
-            try:
-                bot.polling()
-            except telebot.apihelper.ApiTelegramException as e:
-                if e.error_code == 409:
-                    print("Another instance of the bot is running. Exiting...")
+            # Retry loop in case of download failures
+            retries = 0
+            while retries < 3:
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info_dict = ydl.extract_info(youtube_url, download=True)
+                        video_title = info_dict.get('title', None)
                     break
-                else:
-                    print(f"Error occurred: {e}. Restarting bot in 5 seconds...")
-                    time.sleep(5)
-    finally:
-        remove_lock_file()
+                except Exception as e:
+                    logging.error(f"Failed to download video: {e}")
+                    retries += 1
+                    if retries < 3:
+                        logging.info(f"Retrying download... (Attempt {retries + 1})")
+                        time.sleep(RETRY_DELAY)
+                    else:
+                        logging.error("Max retry attempts reached for video download.")
+                        youtube_links_queue.task_done()
+                        continue
 
-# Start the bot polling in a separate thread
-threading.Thread(target=run_bot).start()
+            # Find the downloaded video file
+            video_files = os.listdir(VIDEO_DIR)
+            video_file_path = os.path.join(VIDEO_DIR, video_files[0]) if video_files else None
 
-# Define a simple Flask route to keep the app running
-@app.route('/')
+            if not video_file_path:
+                logging.error("No video files found after download.")
+                youtube_links_queue.task_done()
+                continue
+
+            # Retry loop in case of sending failures
+            retries = 0
+            while retries < 3:
+                try:
+                    # Send the video
+                    sent_message = app.send_video(
+                        chat_id=chat_id,
+                        video=video_file_path,
+                        caption=video_title,
+                        supports_streaming=True
+                    )
+                    # Pin the video message
+                    app.pin_chat_message(chat_id=chat_id, message_id=sent_message.id)
+                    # Clear the video directory
+                    clear_video_directory()
+                    break
+                except Exception as e:
+                    logging.error(f"Failed to send video: {e}")
+                    retries += 1
+                    if retries < 3:
+                        logging.info(f"Retrying to send video... (Attempt {retries + 1})")
+                        time.sleep(RETRY_DELAY)
+                    else:
+                        logging.error("Max retry attempts reached for sending video.")
+                        youtube_links_queue.task_done()
+                        continue
+
+            youtube_links_queue.task_done()
+
+        except Exception as e:
+            logging.error(f"Unexpected error in processing: {e}")
+
+# Function to handle incoming messages
+@app.on_message(filters.text & filters.regex(youtube_url_pattern))
+def handle_message(client, message):
+    chat_id = message.chat.id  # Get the chat_id from the incoming message
+    youtube_url_match = re.search(youtube_url_pattern, message.text)
+    youtube_url = youtube_url_match.group(0)
+    # Delete the YouTube link message immediately
+    client.delete_messages(chat_id=chat_id, message_ids=[message.id])
+    youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
+
+# Flask app setup
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
 def index():
-    return 'Bot is running', 200
-    
+    return "Telegram Bot is running."
+
+@flask_app.route('/webhook', methods=['POST'])
+def webhook():
+    update = request.get_json()
+    app.process_update(update)
+    return "ok", 200
+
+# Start the Pyrogram client and the worker thread
+if __name__ == "__main__":
+    # Delete the session file each time the bot starts (optional)
+    if os.path.exists(session_file_path):
+        os.remove(session_file_path)
+        logging.info(f"Deleted existing session file: {session_file_path}")
+
+    # Start the worker thread
+    worker_thread = Thread(target=process_youtube_links)
+    worker_thread.start()
+
+    # Run the Flask app
+    flask_app.run(host='0.0.0.0', port=5000)
