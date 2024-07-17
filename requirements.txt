@@ -1,3 +1,4 @@
 Flask
 pyrogram
+tgcrypto
 yt_dlp
