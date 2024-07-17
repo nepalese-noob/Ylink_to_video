@@ -1,9 +1,10 @@
 services:
   - type: web
-    name: youtube-telegram-bot
+    name: telegram-bot
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python h8.py"
+    plan: free
+    buildCommand: ""
+    startCommand: "bash start.sh""
     envVars:
       - key: API_ID
         value: "22519301"
