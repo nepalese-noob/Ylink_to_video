@@ -147,13 +147,6 @@ flask_app = Flask(__name__)
 def index():
     return "Telegram Bot is running."
 
-@flask_app.route('/webhook', methods=['POST'])
-def webhook():
-    update = request.get_json()
-    logging.info(f"Received update: {update}")
-    asyncio.run(app.receive_update(update))
-    return jsonify(ok=True)
-
 if __name__ == "__main__":
     # Delete the session file each time the bot starts (optional)
     session_file_path = "my_bot.session"
@@ -166,4 +159,9 @@ if __name__ == "__main__":
     worker_thread.start()
 
     # Start the Flask app
-    flask_app.run(host='0.0.0.0', port=5000)
+    Thread(target=lambda: flask_app.run(host='0.0.0.0', port=5000)).start()
+
+    # Start the Pyrogram client
+    app.start()
+    app.idle()
+            
