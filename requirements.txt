@@ -1,6 +1,6 @@
 Flask==2.3.2
 gunicorn
-pyTelegramBotAPI==4.11.1
+pyTelegramBotAPI
 requests==2.28.2
 deep-translator==1.9.0
 feedparser==6.0.8
