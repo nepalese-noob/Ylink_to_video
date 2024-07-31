@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 import random
-from flask import Flask
+from flask import Flask, request
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -14,29 +14,23 @@ logging.basicConfig(level=logging.INFO)
 # Initialize Flask app
 app = Flask(__name__)
 
-# Replace 'YOUR_API_KEY' with your actual API key from newsdata.io
-API_KEY = 'pub_4030523935a3986c2090b9c0e20292e96c25d'
-API_URL = f'https://newsdata.io/api/1/news?apikey={API_KEY}&country=np&language=en'
+# Replace with environment variables for safety
+API_KEY = os.getenv('NEWS_API_KEY')
+BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+GROUP_CHAT_ID = os.getenv('GROUP_CHAT_ID')
 
-# Online Khabar RSS feed URL
+API_URL = f'https://newsdata.io/api/1/news?apikey={API_KEY}&country=np&language=en'
 FEED_URL = 'https://www.onlinekhabar.com/feed'
 
-# Replace 'YOUR_BOT_TOKEN' with your actual bot token
-bot = telebot.TeleBot('6775225485:AAH0mQnCS5fVNMX2GAfbsOb6ZR6lXYhXkPc')
-
-# Replace 'YOUR_GROUP_CHAT_ID' with the actual chat ID of your group
-GROUP_CHAT_ID = '-1001597616235'
+bot = telebot.TeleBot(BOT_TOKEN)
 
 def fetch_viral_news():
-    logging.info("Fetching viral news...")
     response = requests.get(API_URL)
     if response.status_code == 200:
         news_items = response.json().get('results', [])
         viral_news = [item for item in news_items if is_viral(item)]
-        logging.info(f"Fetched {len(viral_news)} viral news items.")
         return viral_news
     else:
-        logging.error(f"Failed to fetch viral news: {response.status_code}")
         return []
 
 def get_most_viral_news(news_items):
@@ -69,13 +63,12 @@ def translate_to_nepali(text):
     return ''
 
 def fetch_news():
-    logging.info("Fetching RSS feed news...")
     feed = feedparser.parse(FEED_URL)
     return feed.entries
 
 def send_onlinekhabar_news():
-    sent_news = set()
-    logging.info("Starting to send onlinekhabar news...")
+    sent_news = set()  # Set to store already sent news titles
+
     while True:
         try:
             news_items = fetch_news()
@@ -86,14 +79,14 @@ def send_onlinekhabar_news():
                     sent_news.add(item.title)
                     logging.info(f"Sent RSS feed news: {message}")
                     break
-            time.sleep(10000)
+            time.sleep(10000)  # Sleep for over 1 hour before fetching news again
         except Exception as e:
             logging.error(f"An error occurred in send_onlinekhabar_news: {e}")
-            time.sleep(300)
+            time.sleep(300)  # Sleep for 5 minutes before retrying
 
 def send_viral_news():
-    sent_news = set()
-    logging.info("Starting to send viral news...")
+    sent_news = set()  # Set to store already sent news titles
+
     while True:
         try:
             news_items = fetch_viral_news()
@@ -106,10 +99,10 @@ def send_viral_news():
                     bot.send_message(GROUP_CHAT_ID, message)
                     sent_news.add(message)
                     logging.info(f"Sent viral news: {message}")
-            time.sleep(10000)
+            time.sleep(10000)  # Sleep for over 1 hour and 15 minutes before fetching news again
         except Exception as e:
             logging.error(f"An error occurred in send_viral_news: {e}")
-            time.sleep(300)
+            time.sleep(300)  # Sleep for 5 minutes before retrying
 
 @app.route('/')
 def home():
@@ -149,5 +142,8 @@ def send_random_news(message):
         bot.send_message(message.chat.id, "An error occurred while fetching the news.")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000)  # Running Flask app
-        
+    # Start the Flask app
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000))), daemon=True).start()
+    
+    # Start the bot polling
+    bot.polling(none_stop=True)
