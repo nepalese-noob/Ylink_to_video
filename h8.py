@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import yt_dlp
-from pyrogram import Client, filters
+from pyrogram import Client, filters, errors
 from threading import Thread
 from queue import Queue
 from flask import Flask
@@ -12,10 +12,17 @@ import time
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Define paths and environment variables
+# Define the path to the session file
 session_file_path = "my_bot.session"
+
+# Initialize the Pyrogram client
+api_id = os.getenv("API_ID")
+api_hash = os.getenv("API_HASH")
+bot_token = os.getenv("BOT_TOKEN")
+app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+
+# Define the directory where videos are saved
 VIDEO_DIR = "./sentvideo_in_telegram/"
-OTP_USER_ID = os.getenv("OTP_USER_ID")  # Replace with the actual user ID or username
 
 # Create the video directory if it doesn't exist
 if not os.path.exists(VIDEO_DIR):
@@ -30,18 +37,27 @@ youtube_links_queue = Queue()
 # Retry delay in seconds
 RETRY_DELAY = 5
 
-# Initialize Flask app
-flask_app = Flask(__name__)
+# Define the user to request OTP from
+OTP_REQUEST_USER_ID = "@NEPALESEN00B"  # Use actual user ID or username
 
-@flask_app.route('/')
-def home():
-    return "Bot is running."
+# Function to request OTP from a user
+def request_otp():
+    app.send_message(OTP_REQUEST_USER_ID, "Please provide the OTP for authentication.")
 
-# Initialize Pyrogram client
-api_id = os.getenv("API_ID")
-api_hash = os.getenv("API_HASH")
-bot_token = os.getenv("BOT_TOKEN")
-app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+# Function to handle OTP message
+@app.on_message(filters.text & filters.user(OTP_REQUEST_USER_ID))
+def handle_otp(client, message):
+    global authenticated
+    otp = message.text.strip()
+    # Use the OTP for authentication (customize this based on your authentication method)
+    try:
+        # Example: This is where you'd handle the OTP for authentication
+        app.sign_in(phone_number=None, code=otp)  # Adjust based on how authentication is done
+        authenticated = True
+        app.send_message(OTP_REQUEST_USER_ID, "Authentication successful!")
+    except Exception as e:
+        logging.error(f"Failed to authenticate with OTP: {e}")
+        app.send_message(OTP_REQUEST_USER_ID, "Authentication failed. Please try again.")
 
 # Function to delete all files in the video directory
 def clear_video_directory():
@@ -60,9 +76,7 @@ def clear_video_directory():
 def process_youtube_links():
     while True:
         try:
-            logging.info("Worker thread: Waiting for next YouTube link...")
             chat_id, youtube_url = youtube_links_queue.get()  # Get the next item from the queue
-            logging.info(f"Worker thread: Processing link {youtube_url} for chat_id {chat_id}")
 
             # Download the video using yt-dlp
             ydl_opts = {
@@ -101,8 +115,6 @@ def process_youtube_links():
                 youtube_links_queue.task_done()
                 continue
 
-            logging.info(f"Video downloaded successfully: {video_file_path}")
-
             # Retry loop in case of sending failures
             retries = 0
             while retries < 3:
@@ -116,7 +128,6 @@ def process_youtube_links():
                     )
                     # Pin the video message
                     app.pin_chat_message(chat_id=chat_id, message_id=sent_message.id)
-                    logging.info(f"Video sent successfully: {video_file_path}")
                     # Clear the video directory
                     clear_video_directory()
                     break
@@ -140,50 +151,38 @@ def process_youtube_links():
 @app.on_message(filters.text & filters.regex(youtube_url_pattern))
 def handle_message(client, message):
     chat_id = message.chat.id  # Get the chat_id from the incoming message
-    logging.info(f"Received message from chat_id {chat_id}: {message.text}")
     youtube_url_match = re.search(youtube_url_pattern, message.text)
     youtube_url = youtube_url_match.group(0)
-    logging.info(f"Detected YouTube URL: {youtube_url}")
     # Delete the YouTube link message immediately
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
-    logging.info(f"Deleted message with YouTube URL from chat_id {chat_id}")
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
-
-# Function to create a new session
-def create_session(client):
-    # Start the client to get the OTP
-    client.start()
-    logging.info("Bot started. Please send the OTP to the bot.")
-
-    # Wait for OTP
-    @client.on_message(filters.text)
-    def handle_otp(client, message):
-        if message.from_user.username == OTP_USER_ID:
-            otp = message.text
-            logging.info(f"Received OTP: {otp}")
-            # Authenticate with the OTP
-            client.sign_in(phone_number=api_id, phone_code=otp)
-            logging.info("OTP verified successfully.")
-            client.send_message(OTP_USER_ID, "Nice, now I am running well.")
-            client.stop()
-            logging.info("Session created and verified. Bot is now running.")
-
-    client.idle()  # Keep the bot running to receive OTP
 
 # Start the Pyrogram client and the worker thread
 if __name__ == "__main__":
     # Start Flask app
-    flask_thread = Thread(target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000))))
-    flask_thread.start()
+    flask_app = Flask(__name__)
 
-    # If the session file exists, start the bot directly
-    if os.path.exists(session_file_path):
-        logging.info("Session file found. Starting bot...")
-        app.start()
+    @flask_app.route('/')
+    def home():
+        return "Bot is running."
+
+    # Start Flask app
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+    # Check and handle authentication
+    authenticated = False
+    if not os.path.exists(session_file_path):
+        request_otp()
+    else:
+        authenticated = True
+
+    if authenticated:
+        # Start the worker thread
         worker_thread = Thread(target=process_youtube_links)
         worker_thread.start()
+
+        # Run the Pyrogram client
+        app.run()
     else:
-        # Create a new session if the file does not exist
-        logging.info("No session file found. Creating new session...")
-        create_session(app)
+        logging.error("Bot is not authenticated. Please provide OTP to authenticate.")
             
