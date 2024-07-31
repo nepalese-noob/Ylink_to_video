@@ -16,14 +16,17 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
 # Replace with environment variables for safety
-API_KEY = os.getenv('NEWS_API_KEY')
-BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-GROUP_CHAT_ID = os.getenv('GROUP_CHAT_ID')
+API_KEY = os.getenv('NEWS_API_KEY', 'pub_4030523935a3986c2090b9c0e20292e96c25d')
+BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', 'YOUR_BOT_TOKEN')
+GROUP_CHAT_ID = os.getenv('GROUP_CHAT_ID', 'YOUR_GROUP_CHAT_ID')
 
 API_URL = f'https://newsdata.io/api/1/news?apikey={API_KEY}&country=np&language=en'
 FEED_URL = 'https://www.onlinekhabar.com/feed'
 
 bot = telebot.TeleBot(BOT_TOKEN)
+
+sent_rss_titles = set()  # Set to store already sent RSS feed news titles
+sent_viral_messages = set()  # Set to store already sent viral news messages
 
 def fetch_viral_news():
     response = requests.get(API_URL)
@@ -76,22 +79,21 @@ def send_initial_news():
             message = f"{item.title} - {item.link}"
             bot.send_message(GROUP_CHAT_ID, message)
             logging.info(f"Sent initial RSS feed news: {message}")
+            sent_rss_titles.add(item.title)
         else:
             logging.info("No news found from Online Khabar to send initially.")
     except Exception as e:
         logging.error(f"An error occurred in send_initial_news: {e}")
 
 def send_onlinekhabar_news():
-    sent_news = set()  # Set to store already sent news titles
-
     while True:
         try:
             news_items = fetch_news()
             for item in news_items:
-                if item.title not in sent_news:
+                if item.title not in sent_rss_titles:
                     message = f"{item.title} - {item.link}"
                     bot.send_message(GROUP_CHAT_ID, message)
-                    sent_news.add(item.title)
+                    sent_rss_titles.add(item.title)
                     logging.info(f"Sent RSS feed news: {message}")
                     break
             time.sleep(3600)  # Sleep for 1 hour before fetching news again
@@ -100,8 +102,6 @@ def send_onlinekhabar_news():
             time.sleep(300)  # Sleep for 5 minutes before retrying
 
 def send_viral_news():
-    sent_news = set()  # Set to store already sent news titles
-
     while True:
         try:
             news_items = fetch_viral_news()
@@ -110,9 +110,9 @@ def send_viral_news():
                 title_nepali = translate_to_nepali(most_viral_news['title'])
                 description_nepali = translate_to_nepali(most_viral_news['description'])
                 message = f"{title_nepali} - {description_nepali}"
-                if message not in sent_news:
+                if message not in sent_viral_messages:
                     bot.send_message(GROUP_CHAT_ID, message)
-                    sent_news.add(message)
+                    sent_viral_messages.add(message)
                     logging.info(f"Sent viral news: {message}")
             time.sleep(4500)  # Sleep for 1 hour and 15 minutes before fetching news again
         except Exception as e:
