@@ -72,6 +72,7 @@ def fetch_news():
 
 def send_initial_news():
     try:
+        logging.info("Sending initial news...")
         # Fetch and send a random RSS feed news
         news_items = fetch_news()
         if news_items:
@@ -161,8 +162,8 @@ if __name__ == '__main__':
     send_initial_news()
     
     # Start the Flask app
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000))), daemon=True).start()
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8000))), daemon=True).start()
     
     # Start the bot polling
-    bot.polling(none_stop=True)
+    bot.polling()
         
