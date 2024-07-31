@@ -2,28 +2,29 @@ import logging
 import os
 import re
 import yt_dlp
-from pyrogram import Client, filters
+from pyrogram import Client, filters, errors
 from threading import Thread
 from queue import Queue
-import time
+from flask import Flask
 import shutil
-from flask import Flask, request, jsonify
-import asyncio
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Initialize the Pyrogram client with environment variables
+# Define the path to the session file
+session_file_path = "my_bot.session"
+
+# Initialize the Pyrogram client
 api_id = os.getenv("API_ID")
 api_hash = os.getenv("API_HASH")
 bot_token = os.getenv("BOT_TOKEN")
-
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
 # Define the directory where videos are saved
-VIDEO_DIR = "/tmp/sentvideo_in_telegram/"
+VIDEO_DIR = "./sentvideo_in_telegram/"
 
-# Create the directory if it doesn't exist
+# Create the video directory if it doesn't exist
 if not os.path.exists(VIDEO_DIR):
     os.makedirs(VIDEO_DIR)
 
@@ -54,7 +55,6 @@ def process_youtube_links():
     while True:
         try:
             chat_id, youtube_url = youtube_links_queue.get()  # Get the next item from the queue
-            logging.info(f"Processing YouTube URL: {youtube_url} for chat_id: {chat_id}")
 
             # Download the video using yt-dlp
             ydl_opts = {
@@ -93,8 +93,6 @@ def process_youtube_links():
                 youtube_links_queue.task_done()
                 continue
 
-            logging.info(f"Downloaded video file: {video_file_path}")
-
             # Retry loop in case of sending failures
             retries = 0
             while retries < 3:
@@ -106,10 +104,8 @@ def process_youtube_links():
                         caption=video_title,
                         supports_streaming=True
                     )
-                    logging.info(f"Sent video to chat_id: {chat_id}, message_id: {sent_message.id}")
                     # Pin the video message
                     app.pin_chat_message(chat_id=chat_id, message_id=sent_message.id)
-                    logging.info(f"Pinned video message: {sent_message.id} in chat_id: {chat_id}")
                     # Clear the video directory
                     clear_video_directory()
                     break
@@ -135,24 +131,13 @@ def handle_message(client, message):
     chat_id = message.chat.id  # Get the chat_id from the incoming message
     youtube_url_match = re.search(youtube_url_pattern, message.text)
     youtube_url = youtube_url_match.group(0)
-    logging.info(f"Received YouTube URL: {youtube_url} from chat_id: {chat_id}")
     # Delete the YouTube link message immediately
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
-# Flask app setup
-flask_app = Flask(__name__)
-
-@flask_app.route('/')
-def index():
-    return "Telegram Bot is running."
-
-def run_flask():
-    flask_app.run(host='0.0.0.0', port=5000)
-
+# Start the Pyrogram client and the worker thread
 if __name__ == "__main__":
     # Delete the session file each time the bot starts (optional)
-    session_file_path = "my_bot.session"
     if os.path.exists(session_file_path):
         os.remove(session_file_path)
         logging.info(f"Deleted existing session file: {session_file_path}")
@@ -161,10 +146,15 @@ if __name__ == "__main__":
     worker_thread = Thread(target=process_youtube_links)
     worker_thread.start()
 
-    # Start the Flask app in a separate thread
-    flask_thread = Thread(target=run_flask)
-    flask_thread.start()
+    # Initialize Flask app
+    flask_app = Flask(__name__)
 
-    # Start the Pyrogram client
+    @flask_app.route('/')
+    def home():
+        return "Bot is running."
+
+    # Start Flask app
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
     app.run()
                         
