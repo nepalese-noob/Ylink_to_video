@@ -17,8 +17,8 @@ app = Flask(__name__)
 
 # Replace with environment variables for safety
 API_KEY = os.getenv('NEWS_API_KEY', 'pub_4030523935a3986c2090b9c0e20292e96c25d')
-BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', 'YOUR_BOT_TOKEN')
-GROUP_CHAT_ID = os.getenv('GROUP_CHAT_ID', 'YOUR_GROUP_CHAT_ID')
+BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '6775225485:AAH0mQnCS5fVNMX2GAfbsOb6ZR6lXYhXkPc')
+GROUP_CHAT_ID = os.getenv('GROUP_CHAT_ID', '-1001597616235')
 
 API_URL = f'https://newsdata.io/api/1/news?apikey={API_KEY}&country=np&language=en'
 FEED_URL = 'https://www.onlinekhabar.com/feed'
