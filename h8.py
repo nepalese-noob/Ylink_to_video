@@ -5,9 +5,9 @@ import yt_dlp
 from pyrogram import Client, filters, errors
 from threading import Thread
 from queue import Queue
-from flask import Flask
 import shutil
 import time
+from flask import Flask
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -49,7 +49,6 @@ def request_otp():
 def handle_otp(client, message):
     global authenticated
     otp = message.text.strip()
-    # Use the OTP for authentication (customize this based on your authentication method)
     try:
         # Example: This is where you'd handle the OTP for authentication
         app.sign_in(phone_number=None, code=otp)  # Adjust based on how authentication is done
@@ -76,9 +75,8 @@ def clear_video_directory():
 def process_youtube_links():
     while True:
         try:
-            chat_id, youtube_url = youtube_links_queue.get()  # Get the next item from the queue
+            chat_id, youtube_url = youtube_links_queue.get()
 
-            # Download the video using yt-dlp
             ydl_opts = {
                 'format': 'best',
                 'outtmpl': VIDEO_DIR + '%(title)s.%(ext)s',
@@ -87,7 +85,6 @@ def process_youtube_links():
                 }]
             }
 
-            # Retry loop in case of download failures
             retries = 0
             while retries < 3:
                 try:
@@ -106,7 +103,6 @@ def process_youtube_links():
                         youtube_links_queue.task_done()
                         continue
 
-            # Find the downloaded video file
             video_files = os.listdir(VIDEO_DIR)
             video_file_path = os.path.join(VIDEO_DIR, video_files[0]) if video_files else None
 
@@ -115,20 +111,16 @@ def process_youtube_links():
                 youtube_links_queue.task_done()
                 continue
 
-            # Retry loop in case of sending failures
             retries = 0
             while retries < 3:
                 try:
-                    # Send the video
                     sent_message = app.send_video(
                         chat_id=chat_id,
                         video=video_file_path,
                         caption=video_title,
                         supports_streaming=True
                     )
-                    # Pin the video message
                     app.pin_chat_message(chat_id=chat_id, message_id=sent_message.id)
-                    # Clear the video directory
                     clear_video_directory()
                     break
                 except Exception as e:
@@ -150,39 +142,36 @@ def process_youtube_links():
 # Function to handle incoming messages
 @app.on_message(filters.text & filters.regex(youtube_url_pattern))
 def handle_message(client, message):
-    chat_id = message.chat.id  # Get the chat_id from the incoming message
+    chat_id = message.chat.id
     youtube_url_match = re.search(youtube_url_pattern, message.text)
     youtube_url = youtube_url_match.group(0)
-    # Delete the YouTube link message immediately
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
-    youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
+    youtube_links_queue.put((chat_id, youtube_url))
 
-# Start the Pyrogram client and the worker thread
-if __name__ == "__main__":
-    # Start Flask app
-    flask_app = Flask(__name__)
+# Initialize Flask app
+flask_app = Flask(__name__)
 
-    @flask_app.route('/')
-    def home():
-        return "Bot is running."
+@flask_app.route('/')
+def home():
+    return "Bot is running."
 
-    # Start Flask app
-    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+# Check and handle authentication
+authenticated = False
+if not os.path.exists(session_file_path):
+    request_otp()
+else:
+    authenticated = True
 
-    # Check and handle authentication
-    authenticated = False
-    if not os.path.exists(session_file_path):
-        request_otp()
-    else:
-        authenticated = True
+if authenticated:
+    # Start the worker thread
+    worker_thread = Thread(target=process_youtube_links)
+    worker_thread.start()
 
-    if authenticated:
-        # Start the worker thread
-        worker_thread = Thread(target=process_youtube_links)
-        worker_thread.start()
-
-        # Run the Pyrogram client
+    # Start the Pyrogram client
+    @flask_app.before_first_request
+    def start_pyrogram():
         app.run()
-    else:
-        logging.error("Bot is not authenticated. Please provide OTP to authenticate.")
-            
+
+if __name__ == "__main__":
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    
