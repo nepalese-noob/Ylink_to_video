@@ -1,178 +1,145 @@
-import logging
 import os
-import re
-import yt_dlp
-from pyrogram import Client, filters, errors
-from threading import Thread
-from queue import Queue
-import shutil
+import telebot
+import requests
+from deep_translator import GoogleTranslator
+import feedparser
+import logging
+import threading
 import time
-from flask import Flask
+import random
+from flask import Flask, request, jsonify
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
+# Fetch sensitive data from environment variables
+API_KEY = os.getenv('NEWS_API_KEY')
+API_URL = f'https://newsdata.io/api/1/news?apikey={API_KEY}&country=np&language=en'
+FEED_URL = 'https://www.onlinekhabar.com/feed'
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+GROUP_CHAT_ID = os.getenv('GROUP_CHAT_ID')
+
 # Initialize Flask app
-flask_app = Flask(__name__)
+app = Flask(__name__)
 
-# Define the path to the session file
-session_file_path = "my_bot.session"
+# Initialize the bot with the token from environment variables
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# Initialize the Pyrogram client
-api_id = os.getenv("API_ID")
-api_hash = os.getenv("API_HASH")
-bot_token = os.getenv("BOT_TOKEN")
-app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+def fetch_viral_news():
+    response = requests.get(API_URL)
+    if response.status_code == 200:
+        news_items = response.json().get('results', [])
+        viral_news = [item for item in news_items if is_viral(item)]
+        return viral_news
+    else:
+        return []
 
-# Define the directory where videos are saved
-VIDEO_DIR = "./sentvideo_in_telegram/"
+def get_most_viral_news(news_items):
+    sorted_news = sorted(news_items, key=lambda x: x.get('shares', 0), reverse=True)
+    if sorted_news:
+        return sorted_news[0]
+    else:
+        return None
 
-# Create the video directory if it doesn't exist
-if not os.path.exists(VIDEO_DIR):
-    os.makedirs(VIDEO_DIR)
+def is_viral(news_item):
+    return True  # Placeholder condition
 
-# Define YouTube URL pattern
-youtube_url_pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+'
+def translate_to_nepali(text):
+    if text:
+        if len(text) <= 5000:
+            translated_text = GoogleTranslator(source='en', target='ne').translate(text)
+            return translated_text
+        else:
+            last_full_stop_index = text.rfind('.', 0, 5000)
+            if last_full_stop_index == -1:
+                logging.info("No full stop found within the first 5000 characters. Truncating the text.")
+                truncated_text = text[:5000]
+            else:
+                logging.info("Truncating text at the last full stop within the first 5000 characters.")
+                truncated_text = text[:last_full_stop_index + 1]
+            translated_text = GoogleTranslator(source='en', target='ne').translate(truncated_text)
+            return translated_text
+    else:
+        logging.info("Input text is empty.")
+    return ''
 
-# Queue to hold tuples of (chat_id, YouTube link)
-youtube_links_queue = Queue()
+def fetch_news():
+    feed = feedparser.parse(FEED_URL)
+    return feed.entries
 
-# Retry delay in seconds
-RETRY_DELAY = 5
+@app.route('/send_news', methods=['POST'])
+def send_news():
+    data = request.json
+    command = data.get('command')
+    
+    if command == 'news':
+        if random.choice([True, False]):
+            news_items = fetch_news()
+            if news_items:
+                item = random.choice(news_items)
+                bot.send_message(GROUP_CHAT_ID, f"{item.title} - {item.link}")
+                logging.info(f"Sent RSS feed news: {item.title} - {item.link}")
+                return jsonify({'status': 'success', 'message': f"Sent RSS feed news: {item.title} - {item.link}"}), 200
+            else:
+                return jsonify({'status': 'error', 'message': 'No news found from Online Khabar.'}), 404
+        else:
+            news_items = fetch_viral_news()
+            most_viral_news = get_most_viral_news(news_items)
+            if most_viral_news:
+                title_nepali = translate_to_nepali(most_viral_news['title'])
+                description_nepali = translate_to_nepali(most_viral_news['description'])
+                message_text = f"{title_nepali} - {description_nepali}"
+                bot.send_message(GROUP_CHAT_ID, message_text)
+                logging.info(f"Sent viral news: {message_text}")
+                return jsonify({'status': 'success', 'message': f"Sent viral news: {message_text}"}), 200
+            else:
+                return jsonify({'status': 'error', 'message': 'No viral news found.'}), 404
+    else:
+        return jsonify({'status': 'error', 'message': 'Invalid command.'}), 400
 
-# Define the user to request OTP from
-OTP_REQUEST_USER_ID = "@NEPALESEN00B"  # Use actual user ID or username
+def send_onlinekhabar_news():
+    sent_news = set()  # Set to store already sent news titles
 
-# Function to request OTP from a user
-def request_otp():
-    app.send_message(OTP_REQUEST_USER_ID, "Please provide the OTP for authentication.")
-
-# Function to handle OTP message
-@app.on_message(filters.text & filters.user(OTP_REQUEST_USER_ID))
-def handle_otp(client, message):
-    global authenticated
-    otp = message.text.strip()
-    try:
-        # Example: This is where you'd handle the OTP for authentication
-        # You might need to adjust this based on your actual authentication process
-        app.sign_in(phone_number=None, code=otp)  # Adjust based on how authentication is done
-        authenticated = True
-        app.send_message(OTP_REQUEST_USER_ID, "Authentication successful!")
-    except Exception as e:
-        logging.error(f"Failed to authenticate with OTP: {e}")
-        app.send_message(OTP_REQUEST_USER_ID, "Authentication failed. Please try again.")
-
-# Function to delete all files in the video directory
-def clear_video_directory():
-    for filename in os.listdir(VIDEO_DIR):
-        file_path = os.path.join(VIDEO_DIR, filename)
-        try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
-            logging.info(f"Deleted file: {file_path}")
-        except Exception as e:
-            logging.error(f"Failed to delete {file_path}. Reason: {e}")
-
-# Worker function to process YouTube links
-def process_youtube_links():
     while True:
         try:
-            chat_id, youtube_url = youtube_links_queue.get()
-
-            ydl_opts = {
-                'format': 'best',
-                'outtmpl': VIDEO_DIR + '%(title)s.%(ext)s',
-                'postprocessors': [{
-                    'key': 'FFmpegMetadata'
-                }]
-            }
-
-            retries = 0
-            while retries < 3:
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info_dict = ydl.extract_info(youtube_url, download=True)
-                        video_title = info_dict.get('title', None)
+            news_items = fetch_news()
+            for item in news_items:
+                if item.title not in sent_news:
+                    message = f"{item.title} - {item.link}"
+                    bot.send_message(GROUP_CHAT_ID, message)
+                    sent_news.add(item.title)
+                    logging.info(f"Sent RSS feed news: {message}")
                     break
-                except Exception as e:
-                    logging.error(f"Failed to download video: {e}")
-                    retries += 1
-                    if retries < 3:
-                        logging.info(f"Retrying download... (Attempt {retries + 1})")
-                        time.sleep(RETRY_DELAY)
-                    else:
-                        logging.error("Max retry attempts reached for video download.")
-                        youtube_links_queue.task_done()
-                        continue
-
-            video_files = os.listdir(VIDEO_DIR)
-            video_file_path = os.path.join(VIDEO_DIR, video_files[0]) if video_files else None
-
-            if not video_file_path:
-                logging.error("No video files found after download.")
-                youtube_links_queue.task_done()
-                continue
-
-            retries = 0
-            while retries < 3:
-                try:
-                    sent_message = app.send_video(
-                        chat_id=chat_id,
-                        video=video_file_path,
-                        caption=video_title,
-                        supports_streaming=True
-                    )
-                    app.pin_chat_message(chat_id=chat_id, message_id=sent_message.id)
-                    clear_video_directory()
-                    break
-                except Exception as e:
-                    logging.error(f"Failed to send video: {e}")
-                    retries += 1
-                    if retries < 3:
-                        logging.info(f"Retrying to send video... (Attempt {retries + 1})")
-                        time.sleep(RETRY_DELAY)
-                    else:
-                        logging.error("Max retry attempts reached for sending video.")
-                        youtube_links_queue.task_done()
-                        continue
-
-            youtube_links_queue.task_done()
-
+            time.sleep(10000)  # Sleep for over 1 hour before fetching news again
         except Exception as e:
-            logging.error(f"Unexpected error in processing: {e}")
+            logging.error(f"An error occurred in send_onlinekhabar_news: {e}")
+            time.sleep(300)  # Sleep for 5 minutes before retrying
 
-# Function to handle incoming messages
-@app.on_message(filters.text & filters.regex(youtube_url_pattern))
-def handle_message(client, message):
-    chat_id = message.chat.id
-    youtube_url_match = re.search(youtube_url_pattern, message.text)
-    youtube_url = youtube_url_match.group(0)
-    client.delete_messages(chat_id=chat_id, message_ids=[message.id])
-    youtube_links_queue.put((chat_id, youtube_url))
+def send_viral_news():
+    sent_news = set()  # Set to store already sent news titles
 
-# Initialize Flask app
-@flask_app.route('/')
-def home():
-    return "Bot is running."
+    while True:
+        try:
+            news_items = fetch_viral_news()
+            most_viral_news = get_most_viral_news(news_items)
+            if most_viral_news:
+                title_nepali = translate_to_nepali(most_viral_news['title'])
+                description_nepali = translate_to_nepali(most_viral_news['description'])
+                message = f"{title_nepali} - {description_nepali}"
+                if message not in sent_news:
+                    bot.send_message(GROUP_CHAT_ID, message)
+                    sent_news.add(message)
+                    logging.info(f"Sent viral news: {message}")
+            time.sleep(10000)  # Sleep for over 1 hour and 15 minutes before fetching news again
+        except Exception as e:
+            logging.error(f"An error occurred in send_viral_news: {e}")
+            time.sleep(300)  # Sleep for 5 minutes before retrying
 
-# Check and handle authentication
-authenticated = False
-if not os.path.exists(session_file_path):
-    request_otp()
-else:
-    authenticated = True
-
-if authenticated:
-    # Start the worker thread
-    worker_thread = Thread(target=process_youtube_links)
-    worker_thread.start()
-
-    # Start the Pyrogram client
-    @flask_app.before_first_request
-    def start_pyrogram():
-        app.start()
-
-if __name__ == "__main__":
-    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+if __name__ == '__main__':
+    # Start the two functions in separate threads
+    threading.Thread(target=send_onlinekhabar_news).start()
+    threading.Thread(target=send_viral_news).start()
+    
+    # Start the Flask app
+    app.run(host='0.0.0.0', port=8000)
+                
