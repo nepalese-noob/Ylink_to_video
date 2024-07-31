@@ -1,4 +1,6 @@
 Flask
 pyrogram
 tgcrypto
-yt_dlp
+flask
+yt-dlp
+gunicorn
