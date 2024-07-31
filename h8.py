@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 import random
-from flask import Flask, request
+from flask import Flask
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -67,6 +67,20 @@ def fetch_news():
     feed = feedparser.parse(FEED_URL)
     return feed.entries
 
+def send_initial_news():
+    try:
+        # Fetch and send a random RSS feed news
+        news_items = fetch_news()
+        if news_items:
+            item = random.choice(news_items)
+            message = f"{item.title} - {item.link}"
+            bot.send_message(GROUP_CHAT_ID, message)
+            logging.info(f"Sent initial RSS feed news: {message}")
+        else:
+            logging.info("No news found from Online Khabar to send initially.")
+    except Exception as e:
+        logging.error(f"An error occurred in send_initial_news: {e}")
+
 def send_onlinekhabar_news():
     sent_news = set()  # Set to store already sent news titles
 
@@ -80,7 +94,7 @@ def send_onlinekhabar_news():
                     sent_news.add(item.title)
                     logging.info(f"Sent RSS feed news: {message}")
                     break
-            time.sleep(10000)  # Sleep for over 1 hour before fetching news again
+            time.sleep(3600)  # Sleep for 1 hour before fetching news again
         except Exception as e:
             logging.error(f"An error occurred in send_onlinekhabar_news: {e}")
             time.sleep(300)  # Sleep for 5 minutes before retrying
@@ -100,7 +114,7 @@ def send_viral_news():
                     bot.send_message(GROUP_CHAT_ID, message)
                     sent_news.add(message)
                     logging.info(f"Sent viral news: {message}")
-            time.sleep(10000)  # Sleep for over 1 hour and 15 minutes before fetching news again
+            time.sleep(4500)  # Sleep for 1 hour and 15 minutes before fetching news again
         except Exception as e:
             logging.error(f"An error occurred in send_viral_news: {e}")
             time.sleep(300)  # Sleep for 5 minutes before retrying
@@ -143,8 +157,12 @@ def send_random_news(message):
         bot.send_message(message.chat.id, "An error occurred while fetching the news.")
 
 if __name__ == '__main__':
+    # Send initial news
+    send_initial_news()
+    
     # Start the Flask app
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000))), daemon=True).start()
     
     # Start the bot polling
     bot.polling(none_stop=True)
+        
