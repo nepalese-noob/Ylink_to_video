@@ -18,18 +18,15 @@ session_file_path = "my_bot.session"
 # Initialize Flask app
 flask_app = Flask(__name__)
 
-# Global variables to store login details
+# Global variables
 api_id = None
 api_hash = None
 phone_number = None
 otp_received = False
-bot_token = os.getenv("BOT_TOKEN")
 app = None
 
 # Define the directory where videos are saved
 VIDEO_DIR = "./sentvideo_in_telegram/"
-
-# Create the video directory if it doesn't exist
 if not os.path.exists(VIDEO_DIR):
     os.makedirs(VIDEO_DIR)
 
@@ -136,7 +133,6 @@ def process_youtube_links():
             logging.error(f"Unexpected error in processing: {e}")
 
 # Function to handle incoming messages
-@app.on_message(filters.text & filters.regex(youtube_url_pattern))
 def handle_message(client, message):
     chat_id = message.chat.id  # Get the chat_id from the incoming message
     logging.info(f"Received message from chat_id {chat_id}: {message.text}")
@@ -158,6 +154,7 @@ def start_it():
     phone_number = data.get('phone_number')
     
     if api_id and api_hash and phone_number:
+        global app
         app = Client("my_bot", api_id=api_id, api_hash=api_hash)
         app.connect()
         app.send_code(phone_number)
@@ -185,19 +182,22 @@ def receive_otp():
             return "Invalid OTP. Please try again."
     return "Invalid input."
 
-# Start the Pyrogram client and the worker thread if session file exists
+# Initialize and run the bot if the session file exists
 if os.path.exists(session_file_path):
-    app = Client("my_bot", bot_token=bot_token)
-    app.start()
+    bot_token = os.getenv("BOT_TOKEN")
+    if bot_token:
+        app = Client("my_bot", bot_token=bot_token)
+        app.start()
 
-    # Start the worker thread
-    worker_thread = Thread(target=process_youtube_links)
-    worker_thread.start()
+        # Set up message handler
+        app.add_handler(filters.text & filters.regex(youtube_url_pattern)(handle_message))
 
-    logging.info("Bot is running.")
+        # Start the worker thread
+        worker_thread = Thread(target=process_youtube_links)
+        worker_thread.start()
+
+        logging.info("Bot is running.")
 
 # Start Flask app
 flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-if app and otp_received:
-    app.run()
+            
