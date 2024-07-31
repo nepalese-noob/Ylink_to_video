@@ -12,6 +12,9 @@ from flask import Flask
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
+# Initialize Flask app
+flask_app = Flask(__name__)
+
 # Define the path to the session file
 session_file_path = "my_bot.session"
 
@@ -51,6 +54,7 @@ def handle_otp(client, message):
     otp = message.text.strip()
     try:
         # Example: This is where you'd handle the OTP for authentication
+        # You might need to adjust this based on your actual authentication process
         app.sign_in(phone_number=None, code=otp)  # Adjust based on how authentication is done
         authenticated = True
         app.send_message(OTP_REQUEST_USER_ID, "Authentication successful!")
@@ -149,8 +153,6 @@ def handle_message(client, message):
     youtube_links_queue.put((chat_id, youtube_url))
 
 # Initialize Flask app
-flask_app = Flask(__name__)
-
 @flask_app.route('/')
 def home():
     return "Bot is running."
@@ -170,8 +172,7 @@ if authenticated:
     # Start the Pyrogram client
     @flask_app.before_first_request
     def start_pyrogram():
-        app.run()
+        app.start()
 
 if __name__ == "__main__":
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-    
