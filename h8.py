@@ -118,8 +118,8 @@ def home():
 @app.route('/start')
 def start_services():
     logging.info("Starting background services...")
-    threading.Thread(target=send_onlinekhabar_news).start()
-    threading.Thread(target=send_viral_news).start()
+    threading.Thread(target=send_onlinekhabar_news, daemon=True).start()
+    threading.Thread(target=send_viral_news, daemon=True).start()
     return "Background services started."
 
 @bot.message_handler(commands=['news'])
@@ -150,4 +150,4 @@ def send_random_news(message):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)  # Running Flask app
-                    
+        
