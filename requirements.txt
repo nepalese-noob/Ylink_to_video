@@ -1,6 +1,4 @@
-Flask==2.3.2
-gunicorn
-pyTelegramBotAPI
-requests==2.28.2
-deep-translator==1.9.0
-feedparser==6.0.8
+pyrogram
+tgcrypto
+yt-dlp
+sqlite3
